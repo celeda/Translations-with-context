@@ -154,7 +154,6 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
   const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
 
   const polishFile = useMemo(() => files.find(f => f.name.toLowerCase().includes('pl') || f.name.toLowerCase().includes('polish')), [files]);
-  const englishFile = useMemo(() => files.find(f => f.name.toLowerCase().includes('en') || f.name.toLowerCase().includes('english')), [files]);
 
   useEffect(() => {
     if (previewFileIndex >= files.length && files.length > 0) {
@@ -203,23 +202,16 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
     }
 
     const polishValue = String(getValueByPath(polishFile.data, selectedKey) || '');
-    const englishTranslation = englishFile ? { lang: englishFile.name, value: String(getValueByPath(englishFile.data, selectedKey) || '') } : null;
 
     const otherTranslations = files
-        .filter(f => f.name !== polishFile.name && f.name !== englishFile?.name)
+        .filter(f => f.name !== polishFile.name)
         .map(f => ({
             lang: f.name,
             value: String(getValueByPath(f.data, selectedKey) || ''),
         }));
 
     try {
-        const result = await analyzeTranslations(
-            localContext, 
-            { lang: polishFile.name, value: polishValue }, 
-            englishTranslation,
-            otherTranslations, 
-            selectedModel
-        );
+        const result = await analyzeTranslations(localContext, { lang: polishFile.name, value: polishValue }, otherTranslations, selectedModel);
         setAnalysisResult(result);
     } catch (e: any) {
         setError(e.message || "An unknown error occurred.");
@@ -350,8 +342,7 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
                           isActive ? 'bg-gray-700/50' : 'hover:bg-gray-700/30'
                       ].join(' ');
                       
-                      const isPolishReference = file.name === polishFile?.name;
-                      const isEnglishReference = file.name === englishFile?.name;
+                      const isReference = file.name === polishFile?.name;
                       const analysis = analysisMap.get(file.name);
 
                       return (
@@ -372,16 +363,14 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
                               <ValueDisplay value={value} onSave={handleSave} />
                             </td>
                             <td className="p-3 align-top text-sm">
-                                {isLoading && !isPolishReference && !isEnglishReference && (
+                                {isLoading && !isReference && (
                                     <div className="flex items-center space-x-2 text-gray-400">
                                         <div className="w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
                                         <span>Analyzing...</span>
                                     </div>
                                 )}
-                                {(isPolishReference || isEnglishReference) && (
-                                    <div className="text-xs text-gray-500 italic">
-                                        {isEnglishReference ? 'Primary Reference (EN)' : 'Secondary Reference (PL)'}
-                                    </div>
+                                {isReference && (
+                                    <div className="text-xs text-gray-500 italic">Reference language</div>
                                 )}
                                 {analysis && (
                                     <div className="space-y-2">

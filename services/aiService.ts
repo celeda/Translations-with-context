@@ -1,7 +1,13 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { AIAnalysisResult } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+const apiKey = process.env.GEMINI_API_KEY;
+
+if (!apiKey) {
+  throw new Error('GEMINI_API_KEY environment variable is not set. Please add your Gemini API key to the .env.local file.');
+}
+
+const ai = new GoogleGenAI({ apiKey });
 
 const analysisSchema = {
   type: Type.OBJECT,
@@ -28,8 +34,7 @@ const analysisSchema = {
 
 export const analyzeTranslations = async (
   context: string,
-  polishTranslation: { lang: string; value: string },
-  englishTranslation: { lang: string; value: string } | null,
+  baseTranslation: { lang: string; value: string },
   translationsToReview: { lang: string; value: string }[],
   model: string
 ): Promise<AIAnalysisResult> => {
@@ -38,42 +43,11 @@ export const analyzeTranslations = async (
     .map(t => `- Language: ${t.lang}, Translation: "${t.value}"`)
     .join('\n');
 
-  let prompt: string;
-
-  if (englishTranslation) {
-    prompt = `Jesteś ekspertem lingwistą i specjalistą od lokalizacji. Twoim zadaniem jest szczegółowa ocena tłumaczeń na podstawie dostarczonego kontekstu i źródeł prawdy. Twoje odpowiedzi (w polach 'feedback' i 'suggestion') MUSZĄ być w języku polskim.
-
-**Źródła prawdy:**
-- **Pierwszorzędne (angielski, ${englishTranslation.lang}):** "${englishTranslation.value}"
-- **Drugorzędne (polski, ${polishTranslation.lang}):** "${polishTranslation.value}"
-
-**Kontekst:** "${context}"
-
-**Zadanie:**
-Dla każdego tłumaczenia z listy poniżej, porównaj je z oboma źródłami prawdy (angielskim i polskim).
-
-**W swojej ocenie, dla każdego języka:**
-1.  **'evaluation'**: Użyj jednej z wartości: 'Good', 'Needs Improvement', lub 'Incorrect'. Te wartości muszą pozostać w języku angielskim.
-2.  **'feedback'**:
-    -   Napisz szczegółową opinię w języku polskim.
-    -   Jeśli występują różnice w stosunku do tłumaczenia angielskiego lub polskiego, **podaj konkretne przykłady** (np. "W tłumaczeniu niemieckim użyto słowa 'X', podczas gdy w angielskim źródle jest 'Y', co zmienia znaczenie na...").
-    -   Wskaż, czy tłumaczenie jest zgodne z podanym kontekstem.
-3.  **'suggestion'**:
-    -   Jeśli ocena to 'Needs Improvement' lub 'Incorrect', podaj **konkretną sugestię poprawki** w języku polskim, która będzie lepszym tłumaczeniem.
-    -   Krótko uzasadnij, dlaczego Twoja sugestia jest lepsza.
-    -   Jeśli tłumaczenie jest 'Good', pole 'suggestion' może być pominięte lub pozostać puste.
-
-**Tłumaczenia do oceny:**
-${translationsString}
-
-Zwróć odpowiedź w ustrukturyzowanym formacie JSON, zgodnie z podanym schematem.`;
-  } else {
-    // Fallback to original prompt if no English file is provided
-    prompt = `Jesteś ekspertem lingwistą i specjalistą od lokalizacji. Twoim zadaniem jest ocena tłumaczeń na podstawie dostarczonego kontekstu. Tłumaczenie polskie jest prawidłowym odniesieniem. Twoje odpowiedzi (w polach 'feedback' i 'suggestion') MUSZĄ być w języku polskim.
+  const prompt = `Jesteś ekspertem lingwistą i specjalistą od lokalizacji. Twoim zadaniem jest ocena tłumaczeń na podstawie dostarczonego kontekstu. Tłumaczenie polskie jest prawidłowym odniesieniem. Twoje odpowiedzi (w polach 'feedback' i 'suggestion') MUSZĄ być w języku polskim.
 
 Kontekst: "${context}"
 
-Prawidłowe polskie (${polishTranslation.lang}) tłumaczenie: "${polishTranslation.value}"
+Prawidłowe polskie (${baseTranslation.lang}) tłumaczenie: "${baseTranslation.value}"
 
 Proszę ocenić następujące tłumaczenia na podstawie kontekstu i polskiego odniesienia. Dla każdego z nich podaj:
 1. 'evaluation' (ocenę) jako jeden z następujących ciągów znaków: 'Good', 'Needs Improvement', 'Incorrect'. Te wartości muszą pozostać w języku angielskim.
@@ -83,9 +57,8 @@ Proszę ocenić następujące tłumaczenia na podstawie kontekstu i polskiego od
 Tłumaczenia do oceny:
 ${translationsString}
 
-Zwróć odpowiedź w ustrukturyzowanym formacie JSON, zgodnie z podanym schematem.`;
-  }
-
+Zwróć odpowiedź w ustrukturyzowanym formacie JSON, zgodnie z podanym schematem.
+`;
 
   try {
     const response = await ai.models.generateContent({

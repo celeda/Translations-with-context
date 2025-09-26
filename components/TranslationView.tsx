@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { TranslationFile, AIAnalysisResult, AnalysisItem } from '../types';
 import { getValueByPath, getLineNumber } from '../services/translationService';
 import { analyzeTranslations } from '../services/aiService';
-import { CheckIcon, EditIcon, ClipboardIcon, SparklesIcon, PanelOpenIcon, PanelCloseIcon } from './Icons';
+import { CheckIcon, EditIcon, ClipboardIcon, SparklesIcon, PanelOpenIcon, PanelCloseIcon, BoltIcon } from './Icons';
 import { JsonFileViewer } from './JsonFileViewer';
 
 interface TranslationViewProps {
@@ -152,8 +152,10 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
   const [analysisResult, setAnalysisResult] = useState<AIAnalysisResult | null>(null);
   const [localContext, setLocalContext] = useState('');
   const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
+  const [recentlyApplied, setRecentlyApplied] = useState<Set<string>>(new Set());
 
   const polishFile = useMemo(() => files.find(f => f.name.toLowerCase().includes('pl') || f.name.toLowerCase().includes('polish')), [files]);
+  const englishFile = useMemo(() => files.find(f => f.name.toLowerCase().includes('en') || f.name.toLowerCase().includes('english')), [files]);
 
   useEffect(() => {
     if (previewFileIndex >= files.length && files.length > 0) {
@@ -165,6 +167,7 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
       setAnalysisResult(null);
       setError(null);
       setLocalContext(parentContext || '');
+      setRecentlyApplied(new Set());
   }, [selectedKey, parentContext]);
 
   const analysisMap = useMemo(() => {
@@ -173,6 +176,17 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
     }
     return new Map(analysisResult.analysis.map(item => [item.language, item]));
   }, [analysisResult]);
+  
+  const unappliedSuggestions = useMemo(() => {
+    if (!analysisResult?.analysis) return [];
+    return analysisResult.analysis.filter(item => {
+        if (!item.suggestion || !item.suggestion.trim()) return false;
+        const file = files.find(f => f.name === item.language);
+        if (!file) return false;
+        const currentValue = getValueByPath(file.data, selectedKey);
+        return currentValue !== item.suggestion;
+    });
+  }, [analysisResult, files, selectedKey]);
 
   const handleContextBlur = () => {
     if (localContext !== parentContext) {
@@ -188,6 +202,7 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
     setIsLoading(true);
     setError(null);
     setAnalysisResult(null);
+    setRecentlyApplied(new Set());
 
     if (!polishFile) {
         setError("A Polish translation file (e.g., 'pl.json') is required as a reference for analysis.");
@@ -202,16 +217,23 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
     }
 
     const polishValue = String(getValueByPath(polishFile.data, selectedKey) || '');
+    const englishTranslation = englishFile ? { lang: englishFile.name, value: String(getValueByPath(englishFile.data, selectedKey) || '') } : null;
 
     const otherTranslations = files
-        .filter(f => f.name !== polishFile.name)
+        .filter(f => f.name !== polishFile.name && f.name !== englishFile?.name)
         .map(f => ({
             lang: f.name,
             value: String(getValueByPath(f.data, selectedKey) || ''),
         }));
 
     try {
-        const result = await analyzeTranslations(localContext, { lang: polishFile.name, value: polishValue }, otherTranslations, selectedModel);
+        const result = await analyzeTranslations(
+            localContext, 
+            { lang: polishFile.name, value: polishValue }, 
+            englishTranslation,
+            otherTranslations, 
+            selectedModel
+        );
         setAnalysisResult(result);
     } catch (e: any) {
         setError(e.message || "An unknown error occurred.");
@@ -243,6 +265,32 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
         setTimeout(() => setCopied(false), 2000);
     });
   };
+
+  const handleApplySuggestion = (fileName: string, suggestion: string) => {
+    onUpdateValue(fileName, selectedKey, suggestion);
+    setRecentlyApplied(prev => new Set(prev).add(fileName));
+    setTimeout(() => {
+        setRecentlyApplied(prev => {
+            const next = new Set(prev);
+            next.delete(fileName);
+            return next;
+        });
+    }, 2000);
+  };
+
+  const handleApplyAllSuggestions = () => {
+    const languagesApplied = new Set<string>();
+    unappliedSuggestions.forEach(item => {
+        onUpdateValue(item.language, selectedKey, item.suggestion!);
+        languagesApplied.add(item.language);
+    });
+
+    setRecentlyApplied(languagesApplied);
+    setTimeout(() => {
+        setRecentlyApplied(new Set());
+    }, 2000);
+  };
+
 
   return (
     <div className="flex-grow flex flex-col bg-gray-800/50 rounded-lg overflow-hidden h-full">
@@ -295,6 +343,16 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
             <div className="flex justify-between items-center mb-3">
               <h3 className="text-md font-semibold text-gray-300">Values by Language</h3>
                <div className="flex items-center space-x-2">
+                {unappliedSuggestions.length > 0 && (
+                  <button
+                    onClick={handleApplyAllSuggestions}
+                    className="text-xs font-medium py-1 px-3 rounded-md transition-all duration-200 flex items-center space-x-1.5 bg-teal-600 hover:bg-teal-500 text-white"
+                    title={`Apply ${unappliedSuggestions.length} AI suggestions`}
+                  >
+                    <BoltIcon className="w-4 h-4" />
+                    <span>Apply All</span>
+                  </button>
+                )}
                  <button
                     onClick={handleCopyToClipboard}
                     className={`text-xs font-medium py-1 px-3 rounded-md transition-all duration-200 flex items-center space-x-1.5 ${
@@ -342,8 +400,14 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
                           isActive ? 'bg-gray-700/50' : 'hover:bg-gray-700/30'
                       ].join(' ');
                       
-                      const isReference = file.name === polishFile?.name;
+                      const isPolishReference = file.name === polishFile?.name;
+                      const isEnglishReference = file.name === englishFile?.name;
                       const analysis = analysisMap.get(file.name);
+
+                      const suggestion = analysis?.suggestion?.trim();
+                      const isApplied = suggestion ? value === suggestion : false;
+                      const wasRecentlyApplied = recentlyApplied.has(file.name);
+                      const showAppliedState = isApplied || wasRecentlyApplied;
 
                       return (
                           <tr 
@@ -363,32 +427,44 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
                               <ValueDisplay value={value} onSave={handleSave} />
                             </td>
                             <td className="p-3 align-top text-sm">
-                                {isLoading && !isReference && (
+                                {isLoading && !isPolishReference && !isEnglishReference && (
                                     <div className="flex items-center space-x-2 text-gray-400">
                                         <div className="w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
                                         <span>Analyzing...</span>
                                     </div>
                                 )}
-                                {isReference && (
-                                    <div className="text-xs text-gray-500 italic">Reference language</div>
+                                {(isPolishReference || isEnglishReference) && (
+                                    <div className="text-xs text-gray-500 italic">
+                                        {isEnglishReference ? 'Primary Reference (EN)' : 'Source of Truth (PL)'}
+                                    </div>
                                 )}
                                 {analysis && (
                                     <div className="space-y-2">
                                         <div><EvaluationBadge evaluation={analysis.evaluation} /></div>
                                         <p className="text-gray-300">{analysis.feedback}</p>
-                                        {analysis.suggestion && analysis.suggestion.trim() !== '' && (
+                                        {suggestion && (
                                             <div className="mt-2 p-2 bg-gray-900/50 rounded-md border border-gray-700">
                                                 <p className="text-xs text-gray-400 mb-1">Suggestion:</p>
                                                 <p className="font-mono text-teal-300 text-xs mb-2">"{analysis.suggestion}"</p>
-                                                <button 
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onUpdateValue(file.name, selectedKey, analysis.suggestion);
-                                                    }}
-                                                    className="text-xs bg-teal-700 hover:bg-teal-600 text-white font-semibold py-1 px-2 rounded-md transition-colors"
-                                                >
-                                                    Apply Suggestion
-                                                </button>
+                                                {showAppliedState ? (
+                                                  <button 
+                                                      disabled
+                                                      className="text-xs bg-green-700 text-white font-semibold py-1 px-2 rounded-md flex items-center space-x-1 cursor-default"
+                                                  >
+                                                      <CheckIcon className="w-3 h-3" />
+                                                      <span>Applied</span>
+                                                  </button>
+                                                ) : (
+                                                  <button 
+                                                      onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          handleApplySuggestion(file.name, suggestion);
+                                                      }}
+                                                      className="text-xs bg-teal-700 hover:bg-teal-600 text-white font-semibold py-1 px-2 rounded-md transition-colors"
+                                                  >
+                                                      Apply Suggestion
+                                                  </button>
+                                                )}
                                             </div>
                                         )}
                                     </div>

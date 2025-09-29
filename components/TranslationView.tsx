@@ -4,6 +4,7 @@ import { getValueByPath, getLineNumber } from '../services/translationService';
 import { analyzeTranslations } from '../services/aiService';
 import { CheckIcon, EditIcon, ClipboardIcon, SparklesIcon, PanelOpenIcon, PanelCloseIcon, BoltIcon } from './Icons';
 import { JsonFileViewer } from './JsonFileViewer';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface TranslationViewProps {
   files: TranslationFile[];
@@ -441,7 +442,7 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
                                 {analysis && (
                                     <div className="space-y-2">
                                         <div><EvaluationBadge evaluation={analysis.evaluation} /></div>
-                                        <p className="text-gray-300">{analysis.feedback}</p>
+                                        <MarkdownRenderer content={analysis.feedback} />
                                         {suggestion && (
                                             <div className="mt-2 p-2 bg-gray-900/50 rounded-md border border-gray-700">
                                                 <p className="text-xs text-gray-400 mb-1">Suggestion:</p>

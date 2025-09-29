@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { AIAnalysisResult } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
 const analysisSchema = {
   type: Type.OBJECT,
@@ -41,7 +41,7 @@ export const analyzeTranslations = async (
   let prompt: string;
 
   if (englishTranslation) {
-    prompt = `Jesteś ekspertem lingwistą i specjalistą od lokalizacji. Twoim zadaniem jest szczegółowa ocena tłumaczeń na podstawie dostarczonego kontekstu i źródeł prawdy. Twoje odpowiedzi (w polach 'feedback' i 'suggestion') MUSZĄ być w języku polskim.
+    prompt = `Jesteś ekspertem lingwistą i specjalistą od lokalizacji. Twoim zadaniem jest szczegółowa ocena tłumaczeń dla interfejsu aplikacji. Twoje odpowiedzi (w polach 'feedback' i 'suggestion') MUSZĄ być w języku polskim.
 
 **Źródła prawdy:**
 - **Pierwszorzędne (angielski, ${englishTranslation.lang}):** "${englishTranslation.value}"
@@ -50,18 +50,19 @@ export const analyzeTranslations = async (
 **Kontekst:** "${context}"
 
 **Zadanie:**
-Dla każdego tłumaczenia z listy poniżej, porównaj je z oboma źródłami prawdy (angielskim i polskim).
+Dla każdego tłumaczenia z listy poniżej, oceń je pod kątem obu źródeł prawdy (angielskiego i polskiego).
 
 **W swojej ocenie, dla każdego języka:**
 1.  **'evaluation'**: Użyj jednej z wartości: 'Good', 'Needs Improvement', lub 'Incorrect'. Te wartości muszą pozostać w języku angielskim.
 2.  **'feedback'**:
-    -   Napisz szczegółową opinię w języku polskim.
-    -   Jeśli występują różnice w stosunku do tłumaczenia angielskiego lub polskiego, **podaj konkretne przykłady** (np. "W tłumaczeniu niemieckim użyto słowa 'X', podczas gdy w angielskim źródle jest 'Y', co zmienia znaczenie na...").
+    -   Napisz szczegółową opinię w języku polskim. Użyj podstawowego markdownu, aby poprawić czytelność (np. **pogrubienie**, listy z '-').
+    -   Jeśli występują różnice w stosunku do tłumaczenia angielskiego lub polskiego, podaj konkretne przykłady.
     -   Wskaż, czy tłumaczenie jest zgodne z podanym kontekstem.
 3.  **'suggestion'**:
-    -   Jeśli ocena to 'Needs Improvement' lub 'Incorrect', podaj **konkretną sugestię poprawki** w języku polskim, która będzie lepszym tłumaczeniem.
-    -   Krótko uzasadnij, dlaczego Twoja sugestia jest lepsza.
-    -   Jeśli tłumaczenie jest 'Good', pole 'suggestion' może być pominięte lub pozostać puste.
+    -   Jeśli ocena to 'Needs Improvement' lub 'Incorrect', podaj **TYLKO I WYŁĄCZNIE sugerowany tekst tłumaczenia**.
+    -   Pole 'suggestion' nie może zawierać żadnych dodatkowych opisów, cudzysłowów ani uzasadnień.
+    -   Sugestie MUSZĄ być **krótkie i zwięzłe**, odpowiednie dla interfejsu aplikacji (np. etykiety przycisków).
+    -   Jeśli tłumaczenie jest 'Good', pomiń pole 'suggestion'.
 
 **Tłumaczenia do oceny:**
 ${translationsString}
@@ -69,18 +70,25 @@ ${translationsString}
 Zwróć odpowiedź w ustrukturyzowanym formacie JSON, zgodnie z podanym schematem.`;
   } else {
     // Fallback to original prompt if no English file is provided
-    prompt = `Jesteś ekspertem lingwistą i specjalistą od lokalizacji. Twoim zadaniem jest ocena tłumaczeń na podstawie dostarczonego kontekstu. Tłumaczenie polskie jest prawidłowym odniesieniem. Twoje odpowiedzi (w polach 'feedback' i 'suggestion') MUSZĄ być w języku polskim.
+    prompt = `Jesteś ekspertem lingwistą i specjalistą od lokalizacji, oceniającym tłumaczenia dla interfejsu aplikacji. Twoje odpowiedzi (w polach 'feedback' i 'suggestion') MUSZĄ być w języku polskim.
 
-Kontekst: "${context}"
+**Kontekst:** "${context}"
 
-Prawidłowe polskie (${polishTranslation.lang}) tłumaczenie: "${polishTranslation.value}"
+**Prawidłowe polskie (${polishTranslation.lang}) tłumaczenie:** "${polishTranslation.value}"
 
-Proszę ocenić następujące tłumaczenia na podstawie kontekstu i polskiego odniesienia. Dla każdego z nich podaj:
-1. 'evaluation' (ocenę) jako jeden z następujących ciągów znaków: 'Good', 'Needs Improvement', 'Incorrect'. Te wartości muszą pozostać w języku angielskim.
-2. Krótki 'feedback' (opinię) w języku polskim, wyjaśniający Twoje uzasadnienie.
-3. Jeśli ocena to 'Needs Improvement' lub 'Incorrect', podaj 'suggestion' (sugestię) lepszego tłumaczenia w języku polskim. Jeśli tłumaczenie jest 'Good', pole 'suggestion' może być pominięte lub być pustym ciągiem znaków.
+**Zadanie:**
+Oceń poniższe tłumaczenia, używając polskiego tłumaczenia jako źródła prawdy.
 
-Tłumaczenia do oceny:
+**Dla każdego tłumaczenia:**
+1.  **'evaluation'**: Użyj jednej z wartości: 'Good', 'Needs Improvement', lub 'Incorrect' (wartości muszą pozostać po angielsku).
+2.  **'feedback'**: Napisz zwięzłą opinię w języku polskim. Użyj podstawowego markdownu dla lepszej czytelności (np. **pogrubienie**).
+3.  **'suggestion'**:
+    -   Jeśli ocena nie jest 'Good', podaj **TYLKO I WYŁĄCZNIE sugerowany tekst tłumaczenia**.
+    -   Pole 'suggestion' nie może zawierać żadnych dodatkowych opisów, cudzysłowów ani uzasadnień.
+    -   Sugestie MUSZĄ być **krótkie i zwięzle**, odpowiednie dla interfejsu aplikacji.
+    -   Jeśli tłumaczenie jest 'Good', pomiń pole 'suggestion'.
+
+**Tłumaczenia do oceny:**
 ${translationsString}
 
 Zwróć odpowiedź w ustrukturyzowanym formacie JSON, zgodnie z podanym schematem.`;
@@ -105,6 +113,16 @@ Zwróć odpowiedź w ustrukturyzowanym formacie JSON, zgodnie z podanym schemate
 
   } catch (error) {
     console.error("Error analyzing translations with AI:", error);
-    throw new Error("Failed to get analysis from AI. Please check the console for more details.");
+    const errorMessage = String(error);
+
+    if (errorMessage.includes("PERMISSION_DENIED") || errorMessage.includes("403")) {
+        throw new Error("AI analysis failed due to a permission error. Please ensure the API key is valid and has the necessary permissions enabled.");
+    }
+
+    if (errorMessage.toLowerCase().includes("api key not valid")) {
+        throw new Error("AI analysis failed: The provided API key is not valid. Please check your API key and try again.");
+    }
+
+    throw new Error("Failed to get analysis from AI. An unknown error occurred. Please check the console for more details.");
   }
 };

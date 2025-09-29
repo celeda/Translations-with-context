@@ -1,6 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { AIAnalysisResult } from '../types';
 
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+
 const analysisSchema = {
   type: Type.OBJECT,
   properties: {
@@ -100,7 +102,6 @@ Zwróć odpowiedź w ustrukturyzowanym formacie JSON, zgodnie z podanym schemate
 
 
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,

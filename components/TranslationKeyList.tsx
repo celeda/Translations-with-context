@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { SearchIcon } from './Icons';
 
 interface TranslationKeyListProps {
@@ -9,6 +9,12 @@ interface TranslationKeyListProps {
 
 export const TranslationKeyList: React.FC<TranslationKeyListProps> = ({ keys, selectedKey, onSelectKey }) => {
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    if (selectedKey) {
+      setSearchTerm(selectedKey);
+    }
+  }, [selectedKey]);
 
   const filteredKeys = useMemo(() => {
     if (!searchTerm) return keys;

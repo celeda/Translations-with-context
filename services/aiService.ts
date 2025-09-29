@@ -1,13 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { AIAnalysisResult } from '../types';
 
-const getAI = () => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY environment variable is not set. Please add your Gemini API key to the .env.local file.");
-  }
-  return new GoogleGenAI({ apiKey });
-};
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
 const analysisSchema = {
   type: Type.OBJECT,
@@ -40,7 +34,13 @@ export const analyzeTranslations = async (
   model: string
 ): Promise<AIAnalysisResult> => {
   
-  const translationsString = translationsToReview
+  const allTranslationsToAnalyze = [
+    polishTranslation,
+    ...(englishTranslation ? [englishTranslation] : []),
+    ...translationsToReview
+  ];
+
+  const translationsString = allTranslationsToAnalyze
     .map(t => `- Language: ${t.lang}, Translation: "${t.value}"`)
     .join('\n');
 
@@ -49,14 +49,14 @@ export const analyzeTranslations = async (
   if (englishTranslation) {
     prompt = `Jesteś ekspertem lingwistą i specjalistą od lokalizacji. Twoim zadaniem jest szczegółowa ocena tłumaczeń dla interfejsu aplikacji. Twoje odpowiedzi (w polach 'feedback' i 'suggestion') MUSZĄ być w języku polskim.
 
-**Źródła prawdy:**
+**Źródła prawdy (punkty odniesienia):**
 - **Pierwszorzędne (angielski, ${englishTranslation.lang}):** "${englishTranslation.value}"
 - **Drugorzędne (polski, ${polishTranslation.lang}):** "${polishTranslation.value}"
 
 **Kontekst:** "${context}"
 
 **Zadanie:**
-Dla każdego tłumaczenia z listy poniżej, oceń je pod kątem obu źródeł prawdy (angielskiego i polskiego).
+Dla każdego tłumaczenia z listy poniżej (włączając w to polski i angielski), oceń je pod kątem obu źródeł prawdy. Pamiętaj, że nawet tłumaczenia referencyjne (polski i angielski) mogą zawierać błędy, takie jak literówki czy błędy gramatyczne, które należy zidentyfikować i poprawić.
 
 **W swojej ocenie, dla każdego języka:**
 1.  **'evaluation'**: Użyj jednej z wartości: 'Good', 'Needs Improvement', lub 'Incorrect'. Te wartości muszą pozostać w języku angielskim.
@@ -80,10 +80,10 @@ Zwróć odpowiedź w ustrukturyzowanym formacie JSON, zgodnie z podanym schemate
 
 **Kontekst:** "${context}"
 
-**Prawidłowe polskie (${polishTranslation.lang}) tłumaczenie:** "${polishTranslation.value}"
+**Prawidłowe polskie (${polishTranslation.lang}) tłumaczenie (źródło prawdy):** "${polishTranslation.value}"
 
 **Zadanie:**
-Oceń poniższe tłumaczenia, używając polskiego tłumaczenia jako źródła prawdy.
+Oceń poniższe tłumaczenia, używając polskiego tłumaczenia jako źródła prawdy. Pamiętaj, że nawet polskie tłumaczenie referencyjne może zawierać błędy (np. literówki, błędy gramatyczne), które należy zidentyfikować i poprawić.
 
 **Dla każdego tłumaczenia:**
 1.  **'evaluation'**: Użyj jednej z wartości: 'Good', 'Needs Improvement', lub 'Incorrect' (wartości muszą pozostać po angielsku).
@@ -102,7 +102,6 @@ Zwróć odpowiedź w ustrukturyzowanym formacie JSON, zgodnie z podanym schemate
 
 
   try {
-    const ai = getAI();
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,

@@ -428,19 +428,24 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
                               <ValueDisplay value={value} onSave={handleSave} />
                             </td>
                             <td className="p-3 align-top text-sm">
-                                {isLoading && !isPolishReference && !isEnglishReference && (
+                                {isLoading && (
                                     <div className="flex items-center space-x-2 text-gray-400">
                                         <div className="w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
                                         <span>Analyzing...</span>
                                     </div>
                                 )}
-                                {(isPolishReference || isEnglishReference) && (
+                                {(isPolishReference || isEnglishReference) && !analysis && !isLoading && (
                                     <div className="text-xs text-gray-500 italic">
                                         {isEnglishReference ? 'Primary Reference (EN)' : 'Source of Truth (PL)'}
                                     </div>
                                 )}
                                 {analysis && (
                                     <div className="space-y-2">
+                                        {(isPolishReference || isEnglishReference) && (
+                                            <div className="text-xs text-gray-500 italic">
+                                                {isEnglishReference ? 'Primary Reference (EN)' : 'Source of Truth (PL)'}
+                                            </div>
+                                        )}
                                         <div><EvaluationBadge evaluation={analysis.evaluation} /></div>
                                         <MarkdownRenderer content={analysis.feedback} />
                                         {suggestion && (

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { TranslationFile, Glossary, TranslationHistory, TranslationGroup } from './types';
 import { flattenObjectKeys, setValueByPath, getValueByPath } from './services/translationService';
 import { FileUploader } from './components/FileUploader';
@@ -8,13 +8,87 @@ import { GlossaryModal } from './components/GlossaryModal';
 import { ValueSearchPanel } from './components/ValueSearchPanel';
 import { ValueSearchResultsView } from './components/ValueSearchResultsView';
 import { GroupsView } from './components/GroupsView';
-import { LogoIcon, DownloadIcon, BookOpenIcon, ListBulletIcon, SearchIcon, CollectionIcon } from './components/Icons';
+import { LogoIcon, DownloadIcon, BookOpenIcon, ListBulletIcon, SearchIcon, CollectionIcon, PlusCircleIcon, EditIcon, TrashIcon } from './components/Icons';
 
 // Declare JSZip and saveAs for TypeScript since they are loaded from script tags
 declare var JSZip: any;
 declare var saveAs: any;
 
 type ActiveView = 'keys' | 'search' | 'groups';
+type GroupMode = 'list' | 'create' | 'edit';
+
+// Component for the sidebar when 'Groups' view is active
+interface GroupListPanelProps {
+    groups: TranslationGroup[];
+    selectedGroupId: string | null;
+    onSelectGroup: (groupId: string) => void;
+    onStartCreating: () => void;
+    onStartEditing: (group: TranslationGroup) => void;
+    onDeleteGroup: (groupId: string) => void;
+}
+
+const GroupListPanel: React.FC<GroupListPanelProps> = ({
+    groups,
+    selectedGroupId,
+    onSelectGroup,
+    onStartCreating,
+    onStartEditing,
+    onDeleteGroup,
+}) => {
+    return (
+        <div className="flex flex-col h-full">
+            <div className="p-4 border-b border-gray-700">
+                <button
+                    onClick={onStartCreating}
+                    className="w-full flex items-center justify-center space-x-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-4 rounded-md transition-colors"
+                >
+                    <PlusCircleIcon className="w-5 h-5" />
+                    <span>Create New Group</span>
+                </button>
+            </div>
+            <div className="flex-grow overflow-y-auto">
+                {groups.length > 0 ? (
+                    <ul>
+                        {groups.map(group => (
+                            <li key={group.id}>
+                                <button
+                                    onClick={() => onSelectGroup(group.id)}
+                                    className={`w-full text-left px-4 py-3 text-sm transition-colors duration-150 group flex justify-between items-center ${
+                                        selectedGroupId === group.id
+                                        ? 'bg-teal-500/20 text-teal-300 font-semibold'
+                                        : 'text-gray-300 hover:bg-gray-700/50'
+                                    }`}
+                                >
+                                    <span className="truncate pr-2">{group.name}</span>
+                                    <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                                        <span className="text-xs bg-gray-700 rounded-full px-2 py-0.5 opacity-100 group-hover:opacity-0">{group.keys.length}</span>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); onStartEditing(group); }}
+                                            className="p-1 rounded-md text-gray-400 hover:text-teal-400"
+                                            title="Edit group"
+                                        >
+                                          <EditIcon className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); onDeleteGroup(group.id); }}
+                                            className="p-1 rounded-md text-gray-400 hover:text-red-400"
+                                            title="Delete group"
+                                        >
+                                          <TrashIcon className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                    <div className="p-4 text-center text-gray-500 text-sm mt-4">No groups created yet.</div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 
 const App: React.FC = () => {
   const [translationFiles, setTranslationFiles] = useState<TranslationFile[]>([]);
@@ -30,12 +104,39 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<{ term: string; lang: string } | null>(null);
   const [searchResults, setSearchResults] = useState<string[]>([]);
 
+  // State for Groups view
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [groupMode, setGroupMode] = useState<GroupMode>('list');
+
+  useEffect(() => {
+      if (activeView !== 'groups') {
+          setGroupMode('list');
+      }
+  }, [activeView]);
+
+  useEffect(() => {
+      if (groupMode === 'list') {
+        if (translationGroups.length > 0 && !translationGroups.some(g => g.id === selectedGroupId)) {
+            setSelectedGroupId(translationGroups[0].id);
+        } else if (translationGroups.length === 0) {
+            setSelectedGroupId(null);
+        }
+      }
+  }, [translationGroups, selectedGroupId, groupMode]);
+
   const handleFilesUpload = (uploadResult: { translationFiles: TranslationFile[], contexts: Record<string, string>, glossary: Glossary, history: TranslationHistory, groups: TranslationGroup[] }) => {
     setTranslationFiles(uploadResult.translationFiles);
     setContexts(uploadResult.contexts);
     setGlobalContext(uploadResult.glossary);
     setTranslationHistory(uploadResult.history);
     setTranslationGroups(uploadResult.groups);
+
+    if (uploadResult.groups.length > 0) {
+        setSelectedGroupId(uploadResult.groups[0].id);
+    } else {
+        setSelectedGroupId(null);
+    }
+    setGroupMode('list');
 
     const uploadedFiles = uploadResult.translationFiles;
     if (uploadedFiles.length > 0) {
@@ -147,6 +248,29 @@ const App: React.FC = () => {
     }
   };
 
+  const handleStartCreatingGroup = () => {
+      setGroupMode('create');
+      setSelectedGroupId(null);
+  };
+
+  const handleStartEditingGroup = (group: TranslationGroup) => {
+      setGroupMode('edit');
+      setSelectedGroupId(group.id);
+  };
+
+  const handleDeleteGroup = (groupId: string) => {
+      const updatedGroups = translationGroups.filter(g => g.id !== groupId);
+      setTranslationGroups(updatedGroups);
+      if (selectedGroupId === groupId) {
+          setSelectedGroupId(updatedGroups.length > 0 ? updatedGroups[0].id : null);
+      }
+  };
+
+  const handleSelectGroup = (groupId: string) => {
+      setSelectedGroupId(groupId);
+      setGroupMode('list');
+  };
+
   const hasFiles = useMemo(() => translationFiles.length > 0, [translationFiles]);
 
   const mainContent = () => {
@@ -195,6 +319,10 @@ const App: React.FC = () => {
                 onUpdateValue={handleUpdateValueAndHistory}
                 onUpdateContext={handleUpdateContext}
                 onUpdateGlossary={setGlobalContext}
+                groupMode={groupMode}
+                selectedGroupId={selectedGroupId}
+                onSetGroupMode={setGroupMode}
+                onSetSelectedGroupId={setSelectedGroupId}
             />
         );
       default:
@@ -285,19 +413,23 @@ const App: React.FC = () => {
                     keys={allKeys} 
                     onSelectKey={setSelectedKey}
                     selectedKey={selectedKey}
+                    translationFiles={translationFiles}
                   />
                 ) : activeView === 'search' ? (
                   <ValueSearchPanel 
                     onSearch={handleValueSearch}
                     languages={translationFiles.map(f => f.name)}
                   />
+                ) : activeView === 'groups' ? (
+                  <GroupListPanel
+                    groups={translationGroups}
+                    selectedGroupId={selectedGroupId}
+                    onSelectGroup={handleSelectGroup}
+                    onStartCreating={handleStartCreatingGroup}
+                    onStartEditing={handleStartEditingGroup}
+                    onDeleteGroup={handleDeleteGroup}
+                  />
                 ) : null}
-                {/* Groups view has its own sidebar */}
-                {activeView !== 'groups' && activeView !== 'keys' && activeView !== 'search' && (
-                     <div className="p-4 text-center text-gray-500 text-sm">
-                        Select a view.
-                    </div>
-                )}
               </aside>
               <main className="flex-1 overflow-hidden">
                 {mainContent()}

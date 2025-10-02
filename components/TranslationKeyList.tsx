@@ -1,13 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { SearchIcon } from './Icons';
+import type { TranslationFile } from '../types';
+import { getValueByPath } from '../services/translationService';
 
 interface TranslationKeyListProps {
   keys: string[];
   selectedKey: string | null;
   onSelectKey: (key: string) => void;
+  translationFiles: TranslationFile[];
 }
 
-export const TranslationKeyList: React.FC<TranslationKeyListProps> = ({ keys, selectedKey, onSelectKey }) => {
+export const TranslationKeyList: React.FC<TranslationKeyListProps> = ({ keys, selectedKey, onSelectKey, translationFiles }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
@@ -18,8 +21,26 @@ export const TranslationKeyList: React.FC<TranslationKeyListProps> = ({ keys, se
 
   const filteredKeys = useMemo(() => {
     if (!searchTerm) return keys;
-    return keys.filter(key => key.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [keys, searchTerm]);
+    
+    const lowercasedQuery = searchTerm.toLowerCase();
+    const polishFile = translationFiles.find(f => f.name.toLowerCase().includes('pl') || f.name.toLowerCase().includes('polish'));
+
+    return keys.filter(key => {
+      const keyMatch = key.toLowerCase().includes(lowercasedQuery);
+      if (keyMatch) {
+        return true;
+      }
+
+      if (polishFile) {
+        const value = getValueByPath(polishFile.data, key);
+        if (typeof value === 'string' && value.toLowerCase().includes(lowercasedQuery)) {
+          return true;
+        }
+      }
+      
+      return false;
+    });
+  }, [keys, searchTerm, translationFiles]);
 
   return (
     <div className="flex flex-col flex-grow min-h-0">
@@ -27,7 +48,7 @@ export const TranslationKeyList: React.FC<TranslationKeyListProps> = ({ keys, se
         <div className="relative">
           <input
             type="text"
-            placeholder="Search keys..."
+            placeholder="Search keys or Polish values..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             className="w-full bg-gray-900 border border-gray-600 rounded-md py-2 pl-10 pr-4 text-gray-200 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition"

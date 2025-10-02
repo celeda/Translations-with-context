@@ -1,10 +1,12 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { TranslationFile, Glossary, TranslationHistory, TranslationGroup, AIAnalysisResult } from '../types';
 import { getValueByPath } from '../services/translationService';
 import { analyzeTranslations, buildAnalysisPrompt } from '../services/aiService';
 import { SearchIcon, PlusCircleIcon, SparklesIcon, CollectionIcon, TrashIcon, EditIcon, StarIcon, CodeBracketIcon } from './Icons';
 import { TranslationAnalysisCard } from './TranslationAnalysisCard';
 import { PromptViewerModal } from './PromptViewerModal';
+
+type GroupMode = 'list' | 'create' | 'edit';
 
 interface GroupsViewProps {
     allKeys: string[];
@@ -17,14 +19,19 @@ interface GroupsViewProps {
     onUpdateValue: (fileName: string, key: string, newValue: any) => void;
     onUpdateContext: (key: string, newContext: string) => void;
     onUpdateGlossary: (glossary: Glossary) => void;
+    groupMode: GroupMode;
+    selectedGroupId: string | null;
+    onSetGroupMode: (mode: GroupMode) => void;
+    onSetSelectedGroupId: (groupId: string | null) => void;
 }
 
 const polishFileFinder = (f: TranslationFile) => f.name.toLowerCase().includes('pl') || f.name.toLowerCase().includes('polish');
 
 export const GroupsView: React.FC<GroupsViewProps> = (props) => {
-    const { allKeys, files, contexts, groups, onUpdateGroups } = props;
-    const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-    const [mode, setMode] = useState<'list' | 'create' | 'edit'>('list');
+    const { 
+        allKeys, files, contexts, groups, onUpdateGroups, 
+        groupMode, selectedGroupId, onSetGroupMode, onSetSelectedGroupId 
+    } = props;
     
     // State for creating/editing a group
     const [formState, setFormState] = useState({
@@ -49,14 +56,28 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
     const polishFile = useMemo(() => files.find(polishFileFinder), [files]);
 
     useEffect(() => {
-        if (mode === 'list') {
-            if (groups.length > 0 && !groups.some(g => g.id === selectedGroupId)) {
-                setSelectedGroupId(groups[0].id);
-            } else if (groups.length === 0) {
-                setSelectedGroupId(null);
+        if (groupMode === 'edit' && selectedGroupId) {
+            const group = groups.find(g => g.id === selectedGroupId);
+            if (group) {
+                 setFormState({
+                    name: group.name,
+                    context: group.context,
+                    searchQuery: '',
+                    selectedKeys: new Set(group.keys),
+                    referenceKeys: new Set(group.referenceKeys),
+                });
             }
+        } else if (groupMode === 'create') {
+            resetForm();
         }
-    }, [groups, selectedGroupId, mode]);
+    }, [groupMode, selectedGroupId, groups]);
+
+    useEffect(() => {
+        // Clear analysis data when selected group changes
+        setAnalysisData({});
+        setIsAnalyzing(false);
+    }, [selectedGroupId]);
+
 
     const resetForm = () => {
         setFormState({
@@ -64,42 +85,10 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
             selectedKeys: new Set(), referenceKeys: new Set(),
         });
     };
-
-    const handleStartCreating = () => {
-        resetForm();
-        setMode('create');
-    };
     
-    const handleStartEditing = (group: TranslationGroup) => {
-        setFormState({
-            name: group.name,
-            context: group.context,
-            searchQuery: '',
-            selectedKeys: new Set(group.keys),
-            referenceKeys: new Set(group.referenceKeys),
-        });
-        setSelectedGroupId(group.id);
-        setMode('edit');
-    };
-
     const handleCancelForm = () => {
         resetForm();
-        setMode('list');
-    };
-    
-    const handleSelectGroup = (groupId: string) => {
-        setSelectedGroupId(groupId);
-        setAnalysisData({});
-        setIsAnalyzing(false);
-        setMode('list');
-    };
-
-    const handleDeleteGroup = (groupId: string) => {
-        const updatedGroups = groups.filter(g => g.id !== groupId);
-        onUpdateGroups(updatedGroups);
-        if (selectedGroupId === groupId) {
-            setSelectedGroupId(updatedGroups.length > 0 ? updatedGroups[0].id : null);
-        }
+        onSetGroupMode('list');
     };
     
     const handleSaveGroup = () => {
@@ -109,7 +98,7 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
             return;
         }
 
-        if (mode === 'create') {
+        if (groupMode === 'create') {
             const newGroup: TranslationGroup = {
                 id: String(Date.now()),
                 name: name.trim(),
@@ -118,8 +107,10 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
                 referenceKeys: Array.from(referenceKeys),
             };
             onUpdateGroups([...groups, newGroup]);
-            handleSelectGroup(newGroup.id);
-        } else if (mode === 'edit' && selectedGroupId) {
+            onSetSelectedGroupId(newGroup.id);
+            onSetGroupMode('list');
+
+        } else if (groupMode === 'edit' && selectedGroupId) {
             const updatedGroups = groups.map(g => 
                 g.id === selectedGroupId ? {
                     ...g,
@@ -130,19 +121,20 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
                 } : g
             );
             onUpdateGroups(updatedGroups);
-            handleSelectGroup(selectedGroupId);
+            onSetSelectedGroupId(selectedGroupId);
+            onSetGroupMode('list');
         }
     };
 
     const searchResults = useMemo(() => {
         const query = formState.searchQuery.trim();
-        const baseKeys = mode === 'edit' ? Array.from(formState.selectedKeys) : allKeys;
-        if (!query) return mode === 'edit' ? baseKeys : [];
+        const baseKeys = groupMode === 'edit' ? Array.from(formState.selectedKeys) : allKeys;
+        if (!query) return groupMode === 'edit' ? baseKeys : [];
 
         const lowercasedQuery = query.toLowerCase();
         
         return allKeys.filter(key => {
-            if (mode === 'edit' && formState.selectedKeys.has(key)) return true;
+            if (groupMode === 'edit' && formState.selectedKeys.has(key)) return true;
 
             const keyMatch = key.toLowerCase().includes(lowercasedQuery);
             if (keyMatch) return true;
@@ -155,7 +147,7 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
             }
             return false;
         });
-    }, [formState.searchQuery, formState.selectedKeys, allKeys, polishFile, mode]);
+    }, [formState.searchQuery, formState.selectedKeys, allKeys, polishFile, groupMode]);
     
     const toggleKeySelection = (key: string) => {
         const newSelected = new Set(formState.selectedKeys);
@@ -250,8 +242,6 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
             if (!newAnalysisData[result.key]) {
                 newAnalysisData[result.key] = { result: null, error: null };
             }
-// FIX: Using property existence check ('in' operator) to safely narrow the union type.
-// This is more robust if type inference for the discriminated union on 'status' fails.
             if (result.status === 'fulfilled' && 'value' in result) {
                  newAnalysisData[result.key].result = result.value;
             } else if ('reason' in result) {
@@ -261,76 +251,11 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
         setAnalysisData(newAnalysisData);
         setIsAnalyzing(false);
     };
-
-    const renderGroupList = () => (
-        <aside className="w-96 flex-shrink-0 bg-gray-800/50 border-r border-gray-700 flex flex-col h-full">
-            <div className="p-4 border-b border-gray-700">
-                <button onClick={handleStartCreating} className="w-full flex items-center justify-center space-x-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-4 rounded-md transition-colors">
-                    <PlusCircleIcon className="w-5 h-5"/>
-                    <span>Create New Group</span>
-                </button>
-            </div>
-            <div className="flex-grow overflow-y-auto">
-                {groups.length > 0 ? (
-                    <ul>
-                        {groups.map(group => (
-                            <li key={group.id}>
-                                <button
-                                    onClick={() => handleSelectGroup(group.id)}
-                                    className={`w-full text-left px-4 py-3 text-sm transition-colors duration-150 group flex justify-between items-center ${
-                                        selectedGroupId === group.id && mode === 'list'
-                                        ? 'bg-teal-500/20 text-teal-300 font-semibold'
-                                        : 'text-gray-300 hover:bg-gray-700/50'
-                                    }`}
-                                >
-                                    <span className="truncate pr-2">{group.name}</span>
-                                    <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <span className="text-xs bg-gray-700 rounded-full px-2 py-0.5 opacity-100 group-hover:opacity-0">{group.keys.length}</span>
-                                        <EditIcon
-                                            onClick={(e) => { e.stopPropagation(); handleStartEditing(group); }}
-                                            className="w-4 h-4 text-gray-400 hover:text-teal-400"
-                                        />
-                                        <TrashIcon 
-                                            onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id); }}
-                                            className="w-4 h-4 text-gray-400 hover:text-red-400"
-                                        />
-                                    </div>
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                ) : (
-                    <div className="p-4 text-center text-gray-500 text-sm mt-4">No groups created yet.</div>
-                )}
-            </div>
-        </aside>
-    );
-
-    const renderContent = () => {
-        if (mode === 'create' || mode === 'edit') {
-            return renderGroupForm();
-        }
-
-        const selectedGroup = groups.find(g => g.id === selectedGroupId);
-        if (selectedGroup) {
-            return renderViewGroup(selectedGroup);
-        }
-
-        return (
-            <div className="flex items-center justify-center h-full text-center">
-                <div>
-                    <CollectionIcon className="w-16 h-16 mx-auto text-gray-600"/>
-                    <h2 className="mt-4 text-xl font-semibold text-gray-300">Context Groups</h2>
-                    <p className="mt-2 text-gray-500">Select a group from the list or create a new one to begin.</p>
-                </div>
-            </div>
-        );
-    };
     
     const renderGroupForm = () => (
         <div className="flex flex-col h-full bg-gray-900">
             <div className="p-4 border-b border-gray-700 bg-gray-800/50 space-y-4 flex-shrink-0">
-                <h2 className="text-lg font-semibold text-gray-100">{mode === 'create' ? 'Create a New Context Group' : `Editing Group: ${formState.name}`}</h2>
+                <h2 className="text-lg font-semibold text-gray-100">{groupMode === 'create' ? 'Create a New Context Group' : `Editing Group: ${formState.name}`}</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <input type="text" placeholder="Group Name*" value={formState.name} onChange={e => setFormState(s=>({...s, name: e.target.value}))} className="bg-gray-900 border border-gray-600 rounded-md py-2 px-3 text-gray-200" />
                     <input type="text" placeholder="Group Context*" value={formState.context} onChange={e => setFormState(s=>({...s, context: e.target.value}))} className="bg-gray-900 border border-gray-600 rounded-md py-2 px-3 text-gray-200" />
@@ -347,8 +272,8 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
                             <th className="p-2 w-12 text-center"><input type="checkbox" className="rounded" onChange={(e) => setFormState(s => ({...s, selectedKeys: e.target.checked ? new Set(searchResults) : new Set()}))} checked={searchResults.length > 0 && formState.selectedKeys.size >= searchResults.length}/></th>
                             <th className="p-2 w-12 text-center">Ref</th>
                             <th className="p-2">Key</th>
-                            <th className="p-2 w-64">Polish Value</th>
-                            <th className="p-2">Key Context</th>
+                            <th className="p-2 w-1/4">Polish Value</th>
+                            <th className="p-2 w-1/3">Key Context</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-700/50">
@@ -405,7 +330,7 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
                             ))}
                         </div>
                     </div>
-                    <button onClick={() => handleStartEditing(group)} className="flex items-center space-x-2 text-sm bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-3 rounded-md transition-colors">
+                     <button onClick={() => onSetGroupMode('edit')} className="flex items-center space-x-2 text-sm bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-3 rounded-md transition-colors">
                         <EditIcon className="w-4 h-4" />
                         <span>Edit Group</span>
                     </button>
@@ -462,12 +387,22 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
         </div>
     );
 
+    if (groupMode === 'create' || groupMode === 'edit') {
+        return renderGroupForm();
+    }
+
+    const selectedGroup = groups.find(g => g.id === selectedGroupId);
+    if (selectedGroup) {
+        return renderViewGroup(selectedGroup);
+    }
+
     return (
-        <div className="flex h-full w-full">
-            {renderGroupList()}
-            <main className="flex-1 overflow-hidden">
-                {renderContent()}
-            </main>
+        <div className="flex items-center justify-center h-full text-center">
+            <div>
+                <CollectionIcon className="w-16 h-16 mx-auto text-gray-600"/>
+                <h2 className="mt-4 text-xl font-semibold text-gray-300">Context Groups</h2>
+                <p className="mt-2 text-gray-500">Select a group from the list or create a new one to begin.</p>
+            </div>
         </div>
     );
 };

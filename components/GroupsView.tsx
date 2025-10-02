@@ -341,13 +341,13 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
                 </div>
             </div>
             <div className="flex-grow overflow-y-auto">
-                <table className="w-full text-sm text-left">
+                <table className="w-full text-sm text-left table-fixed">
                     <thead className="sticky top-0 bg-gray-800 z-10">
                         <tr>
                             <th className="p-2 w-12 text-center"><input type="checkbox" className="rounded" onChange={(e) => setFormState(s => ({...s, selectedKeys: e.target.checked ? new Set(searchResults) : new Set()}))} checked={searchResults.length > 0 && formState.selectedKeys.size >= searchResults.length}/></th>
                             <th className="p-2 w-12 text-center">Ref</th>
                             <th className="p-2">Key</th>
-                            <th className="p-2">Polish Value</th>
+                            <th className="p-2 w-64">Polish Value</th>
                             <th className="p-2">Key Context</th>
                         </tr>
                     </thead>
@@ -360,10 +360,10 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
                                         <StarIcon className={`w-5 h-5 transition-colors ${formState.referenceKeys.has(key) ? 'text-yellow-400' : 'text-gray-600 hover:text-yellow-500'}`} />
                                     </button>
                                 </td>
-                                <td className="p-2 font-mono text-teal-300">{key}</td>
-                                <td className="p-2 text-gray-300">{polishFile ? String(getValueByPath(polishFile.data, key) || 'N/A') : 'N/A'}</td>
+                                <td className="p-2 font-mono text-teal-300 break-words">{key}</td>
+                                <td className="p-2 text-gray-300 break-words">{polishFile ? String(getValueByPath(polishFile.data, key) || 'N/A') : 'N/A'}</td>
                                 <td className="p-2 text-gray-400 italic">
-                                    <input type="text" value={getValueByPath(contexts, key) || ''} onChange={(e) => props.onUpdateContext(key, e.target.value)} className="w-full bg-transparent p-1 border border-transparent hover:border-gray-600 focus:border-teal-500 rounded"/>
+                                    <textarea rows={2} value={getValueByPath(contexts, key) || ''} onChange={(e) => props.onUpdateContext(key, e.target.value)} className="w-full bg-transparent p-1 border border-transparent hover:border-gray-600 focus:border-teal-500 rounded resize-y"/>
                                 </td>
                             </tr>
                         ))}
@@ -371,12 +371,12 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
                 </table>
                  {formState.searchQuery && searchResults.length === 0 && <p className="p-4 text-center text-gray-500">No results found.</p>}
             </div>
-             <div className="p-4 border-t border-gray-700 flex-shrink-0 bg-gray-800/50 flex justify-between items-center">
-                <p className="text-sm text-gray-400">{formState.selectedKeys.size} key(s) selected, {formState.referenceKeys.size} as reference(s)</p>
+             <div className="p-4 border-t border-gray-700 flex-shrink-0 bg-gray-800/50 flex justify-start items-center space-x-4">
                 <div className="flex space-x-2">
-                    <button onClick={handleCancelForm} className="bg-gray-600 hover:bg-gray-500 text-white font-medium py-2 px-4 rounded-md">Cancel</button>
                     <button onClick={handleSaveGroup} disabled={!formState.name || formState.selectedKeys.size === 0} className="bg-teal-600 hover:bg-teal-500 text-white font-medium py-2 px-4 rounded-md disabled:bg-gray-600">Save Group</button>
+                    <button onClick={handleCancelForm} className="bg-gray-600 hover:bg-gray-500 text-white font-medium py-2 px-4 rounded-md">Cancel</button>
                 </div>
+                <p className="text-sm text-gray-400">{formState.selectedKeys.size} key(s) selected, {formState.referenceKeys.size} as reference(s)</p>
             </div>
         </div>
     );

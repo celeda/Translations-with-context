@@ -1,8 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { AIAnalysisResult, Glossary } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-
 const analysisSchema = {
   type: Type.OBJECT,
   properties: {
@@ -34,6 +32,13 @@ export const analyzeTranslations = async (
   model: string,
   globalContext: Glossary
 ): Promise<AIAnalysisResult> => {
+  
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY environment variable is not set");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   
   const allTranslationsToAnalyze = [
     polishTranslation,

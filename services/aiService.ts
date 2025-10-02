@@ -1,7 +1,13 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { AIAnalysisResult, Glossary, TranslationHistory } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+const getAIClient = () => {
+  const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("API key not found. Please set GEMINI_API_KEY in your environment variables.");
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 const analysisSchema = {
   type: Type.OBJECT,

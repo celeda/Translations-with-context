@@ -198,11 +198,18 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
   const [selfManagedIsLoading, setSelfManagedIsLoading] = useState(false);
   const [selfManagedError, setSelfManagedError] = useState<string | null>(null);
   
+  // Local copy of analysis result when it's passed as a prop, to allow for local modifications (e.g., updating status on apply)
+  const [localAnalysisResult, setLocalAnalysisResult] = useState<AIAnalysisResult | null | undefined>(analysisResultProp);
+
+  useEffect(() => {
+      setLocalAnalysisResult(analysisResultProp);
+  }, [analysisResultProp]);
+
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
   const [generatedPrompt, setGeneratedPrompt] = useState('');
 
   // Decide which state to use based on whether controls are shown
-  const analysisResult = showAnalysisControls ? selfManagedAnalysisResult : analysisResultProp;
+  const analysisResult = showAnalysisControls ? selfManagedAnalysisResult : localAnalysisResult;
   const isLoading = showAnalysisControls ? selfManagedIsLoading : isLoadingProp;
   const error = showAnalysisControls ? selfManagedError : errorProp;
 
@@ -386,6 +393,26 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
   const handleApplySuggestion = (fileName: string, suggestion: string) => {
     onUpdateValue(fileName, translationKey, suggestion);
     setRecentlyApplied(prev => new Set(prev).add(fileName));
+
+    const updateAnalysisState = (currentResult: AIAnalysisResult | null | undefined): AIAnalysisResult | null | undefined => {
+        if (!currentResult) return currentResult;
+        const newAnalysis = currentResult.analysis.map(item => {
+            if (item.language === fileName) {
+                // When a suggestion is applied, we optimistically update its status to 'Good'
+                // and remove the suggestion text to prevent re-application.
+                return { ...item, evaluation: 'Good' as 'Good', suggestion: undefined };
+            }
+            return item;
+        });
+        return { ...currentResult, analysis: newAnalysis };
+    };
+
+    if (showAnalysisControls) {
+        setSelfManagedAnalysisResult(updateAnalysisState);
+    } else {
+        setLocalAnalysisResult(updateAnalysisState);
+    }
+
     setTimeout(() => {
         setRecentlyApplied(prev => {
             const next = new Set(prev);
@@ -628,7 +655,7 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
                                                             {showAppliedState ? (
                                                                 <button 
                                                                     disabled
-                                                                    className="text-xs bg-green-700 text-white font-semibold py-1 px-2 rounded-md flex items-center space-x-1 cursor-default"
+                                                                    className="text-xs bg-gray-600 text-gray-300 font-semibold py-1 px-2 rounded-md flex items-center space-x-1 cursor-default"
                                                                 >
                                                                     <CheckIcon className="w-3 h-3" />
                                                                     <span>Applied</span>

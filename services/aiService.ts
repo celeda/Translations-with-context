@@ -26,6 +26,25 @@ const analysisSchema = {
   required: ["analysis"]
 };
 
+const bulkTranslationSchema = {
+    type: Type.OBJECT,
+    properties: {
+        translations: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    language: { type: Type.STRING },
+                    translation: { type: Type.STRING }
+                },
+                required: ["language", "translation"]
+            }
+        }
+    },
+    required: ["translations"]
+};
+
+
 const polishFileFinder = (f: { name: string }) => f.name.toLowerCase().includes('pl') || f.name.toLowerCase().includes('polish');
 
 export const buildAnalysisPrompt = (
@@ -234,4 +253,100 @@ export const generateContextForKey = async (
 
     throw new Error("Failed to get context suggestion from AI. An unknown error occurred. Please check the console for more details.");
   }
+};
+
+export const buildBulkTranslatePrompt = (
+    appContext: string,
+    glossary: Glossary,
+    translationKey: string,
+    keyContext: string,
+    polishValue: string,
+    englishValue: string | null,
+    targetLangs: string[]
+): string => {
+    let glossaryString = "";
+    if (glossary && Object.keys(glossary).length > 0) {
+        const glossaryEntries = Object.entries(glossary)
+            .map(([key, translations]) => {
+                const rules = Object.entries(translations)
+                    .map(([lang, value]) => `  - W języku '${lang}', termin ten MUSI być tłumaczony jako "${value}".`)
+                    .join('\n');
+                return `- Dla terminu źródłowego "${key}":\n${rules}`;
+            })
+            .join('\n');
+
+        glossaryString = `
+**Glosariusz Terminologiczny (Wysoki Priorytet):**
+Poniższe reguły terminologiczne są obowiązkowe i muszą być ściśle przestrzegane.
+${glossaryEntries}
+`;
+    }
+
+    return `Jesteś ekspertem od lokalizacji oprogramowania. Twoim zadaniem jest przetłumaczenie klucza interfejsu użytkownika na listę podanych języków, zachowując najwyższą jakość i spójność.
+
+**Hierarchia Kontekstu (od najważniejszej):**
+1.  **Glosariusz Terminologiczny:** Zdefiniowane tłumaczenia dla konkretnych terminów są absolutnie nadrzędne.
+2.  **Kontekst Klucza:** Opis funkcjonalności danego klucza.
+3.  **Kontekst Globalny Aplikacji:** Ogólny opis aplikacji, jej tonu i grupy docelowej.
+
+---
+
+**Kontekst Globalny Aplikacji:**
+${appContext || "Brak globalnego kontekstu."}
+
+---
+${glossaryString}
+---
+
+**Zadanie do wykonania:**
+
+Przetłumacz poniższy klucz, opierając się na źródłowych tłumaczeniach (polskim i angielskim) oraz dostarczonych kontekstach.
+
+-   **Klucz:** \`${translationKey}\`
+-   **Kontekst Klucza:** ${keyContext || "Brak specyficznego kontekstu dla tego klucza."}
+-   **Tłumaczenie Źródłowe (Polski):** "${polishValue}"
+-   **Tłumaczenie Źródłowe (Angielski):** "${englishValue || 'N/A'}"
+
+**Języki Docelowe:** ${targetLangs.join(', ')}
+
+**Instrukcje Wyjściowe:**
+-   Zwróć odpowiedź w formacie JSON.
+-   Dla każdego języka docelowego podaj sugerowane tłumaczenie.
+-   Tłumaczenia muszą być precyzyjne, naturalne i spójne z podanymi kontekstami.
+-   Jeśli tłumaczenie źródłowe zawiera zmienne (np. \`{value}\`), zachowaj je w identycznej formie w swoich tłumaczeniach.
+-   Zwróć TYLKO I WYŁĄCZNIE prawidłowy JSON zgodny ze schematem. Nie dodawaj żadnych wyjaśnień ani formatowania markdown.`;
+};
+
+
+export const bulkTranslate = async (
+    appContext: string,
+    glossary: Glossary,
+    translationKey: string,
+    keyContext: string,
+    polishValue: string,
+    englishValue: string | null,
+    targetLangs: string[]
+): Promise<{ language: string; translation: string }[]> => {
+
+    const prompt = buildBulkTranslatePrompt(appContext, glossary, translationKey, keyContext, polishValue, englishValue, targetLangs);
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: bulkTranslationSchema,
+            },
+        });
+
+        const jsonText = response.text.trim();
+        const cleanJsonText = jsonText.replace(/^```json\s*|```$/g, '');
+        const parsed = JSON.parse(cleanJsonText);
+        return parsed.translations as { language: string; translation: string }[];
+
+    } catch (error) {
+        console.error(`Error bulk translating key "${translationKey}" with AI:`, error);
+        throw new Error(`Failed to get bulk translation for key: ${translationKey}.`);
+    }
 };

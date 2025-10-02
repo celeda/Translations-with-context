@@ -3,7 +3,14 @@ import type { TranslationFile, Glossary, TranslationHistory, TranslationGroup } 
 import { UploadIcon } from './Icons';
 
 interface FileUploaderProps {
-  onFilesUploaded: (result: { translationFiles: TranslationFile[], contexts: Record<string, string>, glossary: Glossary, history: TranslationHistory, groups: TranslationGroup[] }) => void;
+  onFilesUploaded: (result: { 
+      translationFiles: TranslationFile[], 
+      contexts: Record<string, string>, 
+      glossary: Glossary, 
+      history: TranslationHistory, 
+      groups: TranslationGroup[],
+      appGlobalContext: string 
+  }) => void;
   compact?: boolean;
 }
 
@@ -19,7 +26,8 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFilesUploaded, com
     let glossary: Glossary = {};
     let history: TranslationHistory = {};
     let groups: TranslationGroup[] = [];
-    const defaultResult = { translationFiles: [], contexts: {}, glossary: {}, history: {}, groups: [] };
+    let appGlobalContext: string = '';
+    const defaultResult = { translationFiles: [], contexts: {}, glossary: {}, history: {}, groups: [], appGlobalContext: '' };
 
     const hasContextJson = filesArray.some(file => file.name === 'context.json');
     if (!hasContextJson) {
@@ -53,6 +61,8 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFilesUploaded, com
           history = data;
         } else if (file.name === 'groups.json') {
           groups = data;
+        } else if (file.name === 'app_context.json') {
+          appGlobalContext = data.context || '';
         } else {
           const fileName = file.name.replace('.json', '');
           translationFiles.push({ name: fileName, data });
@@ -63,7 +73,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFilesUploaded, com
         return;
       }
     }
-    onFilesUploaded({ translationFiles, contexts, glossary, history, groups });
+    onFilesUploaded({ translationFiles, contexts, glossary, history, groups, appGlobalContext });
   }, [onFilesUploaded]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -132,7 +142,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFilesUploaded, com
           <p className="mb-2 text-sm text-gray-400">
             <span className="font-semibold text-teal-400">Click to upload</span> or drag and drop
           </p>
-          <p className="text-xs text-gray-500">Required: `context.json`. Optional: `glossary.json`, `history.json`, `groups.json`</p>
+          <p className="text-xs text-gray-500">Required: `context.json`. Optional: `glossary.json`, `history.json`, `groups.json`, `app_context.json`</p>
         </div>
         <input 
           id="file-upload" 

@@ -30,3 +30,8 @@ export interface TranslationGroup {
   keys: string[];
   referenceKeys: string[];
 }
+
+export interface BulkTranslationSuggestion {
+    key: string;
+    suggestions: Record<string, string>; // lang -> suggestion
+}

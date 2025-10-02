@@ -1,13 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { AIAnalysisResult, Glossary, TranslationHistory } from '../types';
 
-const getAIClient = () => {
-  const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("API key not found. Please set GEMINI_API_KEY in your environment variables.");
-  }
-  return new GoogleGenAI({ apiKey });
-};
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
 const analysisSchema = {
   type: Type.OBJECT,
@@ -110,10 +104,9 @@ Dla każdego tłumaczenia z listy poniżej (włączając w to polski i angielski
 **W swojej ocenie, dla każdego języka:**
 1.  **'evaluation'**: Użyj jednej z wartości: 'Good', 'Needs Improvement', lub 'Incorrect'. Wartości muszą pozostać w języku angielskim.
 2.  **'feedback'**:
-    -   Napisz szczegółową opinię w języku polskim. Użyj podstawowego markdownu (np. **pogrubienie**).
-    -   **Krytycznie ważne:** Potwierdź, czy tłumaczenie jest zgodne z **Historią Zmian**. Jeśli nie, to jest błąd.
-    -   Następnie sprawdź zgodność z **Glosariuszem**. Zignorowanie reguły z glosariusza to błąd.
-    -   Na końcu oceń zgodność z ogólnym kontekstem i źródłami prawdy.
+    -   Napisz zwięzłą i szczegółową opinię w języku polskim, która uzasadnia Twoją ocenę ('evaluation'). Użyj podstawowego markdownu (np. **pogrubienie**).
+    -   Skup się wyłącznie na jakości tłumaczenia: jego poprawności gramatycznej, stylistycznej i zgodności z ogólnym kontekstem.
+    -   **Nie wspominaj w komentarzu o "Glosariuszu" ani o "Historii Zmian".** Twoja ocena musi być oparta na tych regułach, ale uzasadnienie powinno dotyczyć samego tekstu. Na przykład, zamiast pisać "Niezgodne z glosariuszem", napisz "Słowo 'Zapisz' jest lepsze w tym kontekście niż 'Archiwizuj'".
 3.  **'suggestion'**:
     -   Jeśli ocena to 'Needs Improvement' lub 'Incorrect', podaj **TYLKO I WYŁĄCZNIE sugerowany tekst tłumaczenia**.
     -   Pole 'suggestion' nie może zawierać żadnych dodatkowych opisów, cudzysłowów ani uzasadnień.
@@ -125,7 +118,6 @@ ${translationsString}
 Zwróć odpowiedź w ustrukturyzowanym formacie JSON, zgodnie z podanym schematem.`;
 
   try {
-    const ai = getAIClient();
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,
@@ -175,7 +167,6 @@ ${translationsString}
 Sugerowany Kontekst (odpowiedz TYLKO I WYŁĄCZNIE sugerowanym tekstem opisu, bez żadnych dodatkowych wstępów, formatowania markdown, cudzysłowów czy nagłówków typu "Sugerowany Kontekst:"):`;
 
   try {
-    const ai = getAIClient();
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,

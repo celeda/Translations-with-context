@@ -135,13 +135,15 @@ ${glossaryString}
 **Kontekst Ogólny:** "${context}"
 
 **Zadanie:**
-Dla każdego tłumaczenia z listy poniżej (włączając w to polski i angielski), oceń je, ściśle przestrzegając podanej hierarchii ważności. Pamiętaj, że nawet tłumaczenia referencyjne mogą zawierać błędy, które należy zidentyfikować i poprawić.
+Dla każdego tłumaczenia z listy poniżej, zastosuj następujący, rygorystyczny proces oceny:
+1.  **Ustal Wzorzec:** Najpierw ustal **idealne, poprawne znaczenie** dla klucza, bazując na obu źródłach prawdy (PL i EN) oraz dostępnym kontekście. Jeśli stwierdzisz, że tłumaczenia referencyjne (PL/EN) są niepoprawne lub nieprecyzyjne, **najpierw w myśli sformułuj ich poprawną wersję**.
+2.  **Porównaj i Oceń:** Użyj tego idealnego, skorygowanego wzorca do oceny **WSZYSTKICH** podanych tłumaczeń (włącznie z oryginalnym polskim i angielskim). Twoja ocena musi być spójna z tym wzorcem i podaną hierarchią ważności.
 
 **W swojej ocenie, dla każdego języka:**
 1.  **'evaluation'**: Użyj jednej z wartości: 'Good', 'Needs Improvement', lub 'Incorrect'. Wartości muszą pozostać w języku angielskim.
 2.  **'feedback'**:
     -   Napisz zwięzłą i szczegółową opinię w języku polskim, która uzasadnia Twoją ocenę ('evaluation'). Użyj podstawowego markdownu (np. **pogrubienie**).
-    -   Skup się wyłącznie na jakości tłumaczenia: jego poprawności gramatycznej, stylistycznej i zgodności z ogólnym kontekstem.
+    -   Skup się wyłącznie na jakości tłumaczenia: jego poprawności gramatycznej, stylistycznej i zgodności z ustalonym wzorcem i kontekstem.
     -   **Nie wspominaj w komentarzu o "Glosariuszu", "Historii Zmian" ani o "Wzorcach Grupy".** Twoja ocena musi być oparta na tych regułach, ale uzasadnienie powinno dotyczyć samego tekstu. Na przykład, zamiast pisać "Niezgodne z glosariuszem", napisz "Słowo 'Zapisz' jest lepsze w tym kontekście niż 'Archiwizuj'".
 3.  **'suggestion'**:
     -   Jeśli ocena to 'Needs Improvement' lub 'Incorrect', podaj **TYLKO I WYŁĄCZNIE sugerowany tekst tłumaczenia**.

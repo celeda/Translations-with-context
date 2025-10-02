@@ -48,6 +48,7 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
         result: AIAnalysisResult | null;
         error: string | null;
     }>>({});
+    const [collapsedKeys, setCollapsedKeys] = useState(new Set<string>());
     
     const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
     const [generatedPrompt, setGeneratedPrompt] = useState('');
@@ -73,9 +74,10 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
     }, [groupMode, selectedGroupId, groups]);
 
     useEffect(() => {
-        // Clear analysis data when selected group changes
+        // Clear analysis and collapse data when selected group changes
         setAnalysisData({});
         setIsAnalyzing(false);
+        setCollapsedKeys(new Set());
     }, [selectedGroupId]);
 
 
@@ -173,6 +175,21 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
         }
         setFormState(s => ({ ...s, referenceKeys: newReferences }));
     };
+
+    const handleToggleCollapse = (key: string) => {
+        setCollapsedKeys(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(key)) {
+                newSet.delete(key);
+            } else {
+                newSet.add(key);
+            }
+            return newSet;
+        });
+    };
+    
+    const handleCollapseAll = (group: TranslationGroup) => setCollapsedKeys(new Set(group.keys));
+    const handleExpandAll = () => setCollapsedKeys(new Set());
 
     const handleShowPrompt = (group: TranslationGroup) => {
         if (group.keys.length === 0) return;
@@ -335,11 +352,10 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
                         <span>Edit Group</span>
                     </button>
                 </div>
-                <div className="flex items-end justify-between gap-4">
-                    <div className="flex-grow space-y-2">
-                         <p className="text-sm text-gray-400 bg-gray-900 p-2 rounded-md border border-gray-700">
-                           <span className="font-semibold text-gray-300">Context: </span> "{group.context}"
-                        </p>
+                <div className="flex items-center justify-between gap-4">
+                     <div className="flex items-center gap-2">
+                         <button onClick={handleExpandAll} className="text-xs font-medium py-1 px-3 rounded-md transition-all duration-200 bg-gray-700 hover:bg-gray-600 text-gray-200">Expand All</button>
+                         <button onClick={() => handleCollapseAll(group)} className="text-xs font-medium py-1 px-3 rounded-md transition-all duration-200 bg-gray-700 hover:bg-gray-600 text-gray-200">Collapse All</button>
                     </div>
                     <div className="flex items-end space-x-2">
                          <button
@@ -360,6 +376,9 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
                         </button>
                     </div>
                 </div>
+                 <p className="text-sm text-gray-400 bg-gray-900 p-2 rounded-md border border-gray-700">
+                   <span className="font-semibold text-gray-300">Context: </span> "{group.context}"
+                </p>
             </div>
             <div className="flex-grow overflow-y-auto p-4 lg:p-6 space-y-6 bg-gray-900">
                 {group.keys.map(key => {
@@ -380,6 +399,8 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
                             analysisResult={keyAnalysis?.result}
                             error={keyAnalysis?.error}
                             isLoading={isAnalyzing && !keyAnalysis}
+                            isCollapsed={collapsedKeys.has(key)}
+                            onToggleCollapse={handleToggleCollapse}
                         />
                     );
                 })}

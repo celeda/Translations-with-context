@@ -25,15 +25,32 @@ export const ValueSearchResultsView: React.FC<ValueSearchResultsViewProps> = (pr
         result: AIAnalysisResult | null;
         error: string | null;
     }>>({});
+    const [collapsedKeys, setCollapsedKeys] = useState(new Set<string>());
     
     const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
     const [generatedPrompt, setGeneratedPrompt] = useState('');
 
     useEffect(() => {
-        // Reset analysis when search query changes
+        // Reset analysis and collapse state when search query changes
         setAnalysisData({});
         setIsAnalyzingAll(false);
+        setCollapsedKeys(new Set());
     }, [searchQuery]);
+
+    const handleToggleCollapse = (key: string) => {
+        setCollapsedKeys(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(key)) {
+                newSet.delete(key);
+            } else {
+                newSet.add(key);
+            }
+            return newSet;
+        });
+    };
+
+    const handleCollapseAll = () => setCollapsedKeys(new Set(keys));
+    const handleExpandAll = () => setCollapsedKeys(new Set());
 
     const handleShowPrompt = () => {
         if (keys.length === 0) return;
@@ -96,9 +113,10 @@ export const ValueSearchResultsView: React.FC<ValueSearchResultsViewProps> = (pr
                 newAnalysisData[result.key] = { result: null, error: null };
             }
 
-            if (result.status === 'fulfilled') {
+            // FIX: Add 'in' operator as a type guard for TypeScript to correctly narrow down the union type.
+            if (result.status === 'fulfilled' && 'value' in result) {
                 newAnalysisData[result.key].result = result.value;
-            } else {
+            } else if (result.status === 'rejected' && 'reason' in result) {
                 newAnalysisData[result.key].error = result.reason.message;
             }
         }
@@ -137,23 +155,29 @@ export const ValueSearchResultsView: React.FC<ValueSearchResultsViewProps> = (pr
                 <h2 className="text-lg font-semibold text-gray-100">
                     {keys.length} result(s) for <span className="text-teal-400 font-semibold">"{searchQuery.term}"</span> in language <span className="text-teal-400 font-semibold">{searchQuery.lang}</span>
                 </h2>
-                <div className="flex items-end justify-end gap-2">
-                     <button
-                        onClick={handleShowPrompt}
-                        disabled={isAnalyzingAll || keys.length === 0}
-                        className="p-2 text-sm bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-md transition-colors duration-200 disabled:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
-                        title="Show a sample prompt for the first result"
-                    >
-                        <CodeBracketIcon className="w-5 h-5"/>
-                    </button>
-                    <button 
-                        onClick={handleAnalyzeAll}
-                        disabled={isAnalyzingAll}
-                        className="flex items-center space-x-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200 disabled:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        <SparklesIcon className="w-5 h-5"/>
-                        <span>{isAnalyzingAll ? 'Analyzing All...' : `Analyze All (${keys.length})`}</span>
-                    </button>
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                         <button onClick={handleExpandAll} className="text-xs font-medium py-1 px-3 rounded-md transition-all duration-200 bg-gray-700 hover:bg-gray-600 text-gray-200">Expand All</button>
+                         <button onClick={handleCollapseAll} className="text-xs font-medium py-1 px-3 rounded-md transition-all duration-200 bg-gray-700 hover:bg-gray-600 text-gray-200">Collapse All</button>
+                    </div>
+                    <div className="flex items-end justify-end gap-2">
+                        <button
+                            onClick={handleShowPrompt}
+                            disabled={isAnalyzingAll || keys.length === 0}
+                            className="p-2 text-sm bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-md transition-colors duration-200 disabled:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Show a sample prompt for the first result"
+                        >
+                            <CodeBracketIcon className="w-5 h-5"/>
+                        </button>
+                        <button 
+                            onClick={handleAnalyzeAll}
+                            disabled={isAnalyzingAll}
+                            className="flex items-center space-x-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200 disabled:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <SparklesIcon className="w-5 h-5"/>
+                            <span>{isAnalyzingAll ? 'Analyzing All...' : `Analyze All (${keys.length})`}</span>
+                        </button>
+                    </div>
                 </div>
             </div>
             <div className="flex-grow overflow-y-auto p-4 lg:p-6 space-y-6 bg-gray-900">
@@ -175,6 +199,8 @@ export const ValueSearchResultsView: React.FC<ValueSearchResultsViewProps> = (pr
                             analysisResult={keyAnalysis?.result}
                             error={keyAnalysis?.error}
                             isLoading={isAnalyzingAll}
+                            isCollapsed={collapsedKeys.has(key)}
+                            onToggleCollapse={handleToggleCollapse}
                         />
                     );
                 })}

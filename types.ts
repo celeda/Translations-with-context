@@ -22,3 +22,11 @@ export type Glossary = Record<string, Record<string, string>>;
 // This acts as a translation memory.
 // Example: { "buttons.submit": { "en": "Submit Application" } }
 export type TranslationHistory = Record<string, Record<string, string>>;
+
+export interface TranslationGroup {
+  id: string;
+  name: string;
+  context: string;
+  keys: string[];
+  referenceKeys: string[];
+}

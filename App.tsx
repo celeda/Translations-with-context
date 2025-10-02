@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import type { TranslationFile, Glossary, TranslationHistory } from './types';
+import type { TranslationFile, Glossary, TranslationHistory, TranslationGroup } from './types';
 import { flattenObjectKeys, setValueByPath, getValueByPath } from './services/translationService';
 import { FileUploader } from './components/FileUploader';
 import { TranslationKeyList } from './components/TranslationKeyList';
@@ -7,19 +7,21 @@ import { TranslationView } from './components/TranslationView';
 import { GlossaryModal } from './components/GlossaryModal';
 import { ValueSearchPanel } from './components/ValueSearchPanel';
 import { ValueSearchResultsView } from './components/ValueSearchResultsView';
-import { LogoIcon, DownloadIcon, BookOpenIcon, ListBulletIcon, SearchIcon } from './components/Icons';
+import { GroupsView } from './components/GroupsView';
+import { LogoIcon, DownloadIcon, BookOpenIcon, ListBulletIcon, SearchIcon, CollectionIcon } from './components/Icons';
 
 // Declare JSZip and saveAs for TypeScript since they are loaded from script tags
 declare var JSZip: any;
 declare var saveAs: any;
 
-type ActiveView = 'keys' | 'search';
+type ActiveView = 'keys' | 'search' | 'groups';
 
 const App: React.FC = () => {
   const [translationFiles, setTranslationFiles] = useState<TranslationFile[]>([]);
   const [contexts, setContexts] = useState<Record<string, any>>({});
   const [globalContext, setGlobalContext] = useState<Glossary>({});
   const [translationHistory, setTranslationHistory] = useState<TranslationHistory>({});
+  const [translationGroups, setTranslationGroups] = useState<TranslationGroup[]>([]);
   const [allKeys, setAllKeys] = useState<string[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [isGlossaryOpen, setIsGlossaryOpen] = useState(false);
@@ -28,11 +30,12 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<{ term: string; lang: string } | null>(null);
   const [searchResults, setSearchResults] = useState<string[]>([]);
 
-  const handleFilesUpload = (uploadResult: { translationFiles: TranslationFile[], contexts: Record<string, string>, glossary: Glossary, history: TranslationHistory }) => {
+  const handleFilesUpload = (uploadResult: { translationFiles: TranslationFile[], contexts: Record<string, string>, glossary: Glossary, history: TranslationHistory, groups: TranslationGroup[] }) => {
     setTranslationFiles(uploadResult.translationFiles);
     setContexts(uploadResult.contexts);
     setGlobalContext(uploadResult.glossary);
     setTranslationHistory(uploadResult.history);
+    setTranslationGroups(uploadResult.groups);
 
     const uploadedFiles = uploadResult.translationFiles;
     if (uploadedFiles.length > 0) {
@@ -129,6 +132,11 @@ const App: React.FC = () => {
         const historyString = JSON.stringify(translationHistory, null, 2);
         zip.file('history.json', historyString);
       }
+
+      if (translationGroups.length > 0) {
+          const groupsString = JSON.stringify(translationGroups, null, 2);
+          zip.file('groups.json', groupsString);
+      }
       
       const blob = await zip.generateAsync({ type: 'blob' });
       saveAs(blob, 'translations.zip');
@@ -140,6 +148,64 @@ const App: React.FC = () => {
   };
 
   const hasFiles = useMemo(() => translationFiles.length > 0, [translationFiles]);
+
+  const mainContent = () => {
+    switch (activeView) {
+      case 'keys':
+        return selectedKey ? (
+          <TranslationView 
+              files={translationFiles}
+              selectedKey={selectedKey}
+              onUpdateValue={handleUpdateValueAndHistory}
+              context={getValueByPath(contexts, selectedKey) || ''}
+              onUpdateContext={(newContext) => handleUpdateContext(selectedKey, newContext)}
+              globalContext={globalContext}
+              onUpdateGlossary={setGlobalContext}
+              translationHistory={translationHistory}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full bg-gray-800/30 rounded-lg m-8">
+            <p className="text-gray-500">Select a key from the left to see translations.</p>
+          </div>
+        );
+      case 'search':
+        return (
+          <ValueSearchResultsView
+              keys={searchResults}
+              searchQuery={searchQuery}
+              files={translationFiles}
+              contexts={contexts}
+              globalContext={globalContext}
+              translationHistory={translationHistory}
+              onUpdateValue={handleUpdateValueAndHistory}
+              onUpdateContext={handleUpdateContext}
+              onUpdateGlossary={setGlobalContext}
+          />
+        );
+      case 'groups':
+        return (
+           <GroupsView
+                allKeys={allKeys}
+                files={translationFiles}
+                contexts={contexts}
+                globalContext={globalContext}
+                translationHistory={translationHistory}
+                groups={translationGroups}
+                onUpdateGroups={setTranslationGroups}
+                onUpdateValue={handleUpdateValueAndHistory}
+                onUpdateContext={handleUpdateContext}
+                onUpdateGlossary={setGlobalContext}
+            />
+        );
+      default:
+        return (
+            <div className="flex items-center justify-center h-full bg-gray-800/30 rounded-lg m-8">
+                <p className="text-gray-500">Select a view from the left panel.</p>
+            </div>
+        );
+    }
+  };
+
 
   return (
     <>
@@ -158,7 +224,7 @@ const App: React.FC = () => {
                     <LogoIcon className="h-10 w-10 text-teal-400" />
                     <h1 className="text-3xl font-bold text-gray-100">Translation AI Assistant</h1>
                 </div>
-                <p className="text-gray-400 mb-8">Start by uploading your JSON translation files and `context.json`. You can also include `glossary.json` for consistent terminology and `history.json` to load previous manual edits.</p>
+                <p className="text-gray-400 mb-8">Start by uploading your JSON translation files and `context.json`. You can also include `glossary.json`, `history.json` and `groups.json`.</p>
                 <FileUploader onFilesUploaded={handleFilesUpload} />
               </div>
             </main>
@@ -203,7 +269,14 @@ const App: React.FC = () => {
                         className={`flex-1 flex items-center justify-center space-x-2 p-3 text-sm font-medium transition-colors ${activeView === 'search' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:bg-gray-700/50'}`}
                     >
                         <SearchIcon className="w-5 h-5" />
-                        <span>Search by Value</span>
+                        <span>Search</span>
+                    </button>
+                     <button
+                        onClick={() => setActiveView('groups')}
+                        className={`flex-1 flex items-center justify-center space-x-2 p-3 text-sm font-medium transition-colors ${activeView === 'groups' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:bg-gray-700/50'}`}
+                    >
+                        <CollectionIcon className="w-5 h-5" />
+                        <span>Groups</span>
                     </button>
                 </div>
 
@@ -213,42 +286,21 @@ const App: React.FC = () => {
                     onSelectKey={setSelectedKey}
                     selectedKey={selectedKey}
                   />
-                ) : (
+                ) : activeView === 'search' ? (
                   <ValueSearchPanel 
                     onSearch={handleValueSearch}
                     languages={translationFiles.map(f => f.name)}
                   />
+                ) : null}
+                {/* Groups view has its own sidebar */}
+                {activeView !== 'groups' && activeView !== 'keys' && activeView !== 'search' && (
+                     <div className="p-4 text-center text-gray-500 text-sm">
+                        Select a view.
+                    </div>
                 )}
               </aside>
               <main className="flex-1 overflow-hidden">
-                {activeView === 'keys' && selectedKey ? (
-                    <TranslationView 
-                        files={translationFiles}
-                        selectedKey={selectedKey}
-                        onUpdateValue={handleUpdateValueAndHistory}
-                        context={getValueByPath(contexts, selectedKey) || ''}
-                        onUpdateContext={(newContext) => handleUpdateContext(selectedKey, newContext)}
-                        globalContext={globalContext}
-                        onUpdateGlossary={setGlobalContext}
-                        translationHistory={translationHistory}
-                    />
-                ) : activeView === 'search' ? (
-                   <ValueSearchResultsView
-                        keys={searchResults}
-                        searchQuery={searchQuery}
-                        files={translationFiles}
-                        contexts={contexts}
-                        globalContext={globalContext}
-                        translationHistory={translationHistory}
-                        onUpdateValue={handleUpdateValueAndHistory}
-                        onUpdateContext={handleUpdateContext}
-                        onUpdateGlossary={setGlobalContext}
-                    />
-                ) : (
-                    <div className="flex items-center justify-center h-full bg-gray-800/30 rounded-lg m-8">
-                        <p className="text-gray-500">{activeView === 'keys' ? 'Select a key from the left to see translations.' : 'Perform a search to see results.'}</p>
-                    </div>
-                )}
+                {mainContent()}
               </main>
             </div>
           )}

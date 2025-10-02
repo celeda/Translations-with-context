@@ -1,5 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import type { AIAnalysisResult, Glossary } from '../types';
+import type { AIAnalysisResult, Glossary, TranslationHistory } from '../types';
+
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
 const analysisSchema = {
   type: Type.OBJECT,
@@ -25,20 +27,15 @@ const analysisSchema = {
 };
 
 export const analyzeTranslations = async (
+  translationKey: string,
   context: string,
   polishTranslation: { lang: string; value: string },
   englishTranslation: { lang: string; value: string } | null,
   translationsToReview: { lang: string; value: string }[],
   model: string,
-  globalContext: Glossary
+  globalContext: Glossary,
+  translationHistory: TranslationHistory
 ): Promise<AIAnalysisResult> => {
-  
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY environment variable is not set");
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
   
   const allTranslationsToAnalyze = [
     polishTranslation,
@@ -50,71 +47,76 @@ export const analyzeTranslations = async (
     .map(t => `- Language: ${t.lang}, Translation: "${t.value}"`)
     .join('\n');
 
+  let historyContextString = "";
+  if (translationHistory && translationHistory[translationKey]) {
+    const keyHistory = translationHistory[translationKey];
+    const historyEntries = Object.entries(keyHistory)
+      .map(([lang, value]) => `- Dla języka '${lang}', ostateczna, zatwierdzona przez użytkownika wersja to: "${value}".`)
+      .join('\n');
+    
+    if (historyEntries) {
+      historyContextString = `
+**Historia Zmian (NAJWYŻSZY PRIORYTET):**
+Dla klucza '${translationKey}', użytkownik ręcznie zapisał poniższe wersje. Są to absolutnie ostateczne i poprawne tłumaczenia, które mają pierwszeństwo przed wszystkimi innymi regułami, włączając glosariusz. Każde odstępstwo od tej historii jest błędem krytycznym.
+${historyEntries}
+`;
+    }
+  }
+
   let glossaryString = "";
   if (globalContext && Object.keys(globalContext).length > 0) {
+    const glossaryEntries = Object.entries(globalContext)
+      .map(([key, translations]) => {
+        const rules = Object.entries(translations)
+          .map(([lang, value]) => `  - W języku '${lang}', termin ten MUSI być tłumaczony jako "${value}".`)
+          .join('\n');
+        return `- Dla terminu źródłowego "${key}":\n${rules}`;
+      })
+      .join('\n');
+      
     glossaryString = `
-**Glosariusz Tłumaczeń (Reguły Spójności):**
-Zawsze stosuj się do poniższych reguł terminologicznych. Mają one najwyższy priorytet.
-${Object.entries(globalContext).map(([key, value]) => `- Termin "${key}" MUSI być tłumaczony jako "${value}".`).join('\n')}
+**Glosariusz Terminologiczny (Wysoki Priorytet):**
+Poniższe reguły są obowiązkowe. Mają one pierwszeństwo przed ogólnym kontekstem, ale niższy priorytet niż 'Historia Zmian'.
+${glossaryEntries}
 `;
   }
 
-  let prompt: string;
+  const prompt = `Jesteś ekspertem lingwistą i specjalistą od lokalizacji. Twoim zadaniem jest szczegółowa ocena tłumaczeń dla interfejsu aplikacji. Twoje odpowiedzi (w polach 'feedback' i 'suggestion') MUSZĄ być w języku polskim.
 
-  if (englishTranslation) {
-    prompt = `Jesteś ekspertem lingwistą i specjalistą od lokalizacji. Twoim zadaniem jest szczegółowa ocena tłumaczeń dla interfejsu aplikacji. Twoje odpowiedzi (w polach 'feedback' i 'suggestion') MUSZĄ być w języku polskim.
+**Hierarchia Ważności Informacji (od najważniejszej):**
+1.  **Historia Zmian:** Ostateczne, ręcznie zapisane przez użytkownika wersje.
+2.  **Glosariusz Terminologiczny:** Zdefiniowane tłumaczenia dla konkretnych terminów.
+3.  **Źródła Prawdy (Referencje):** Tłumaczenia w języku angielskim i polskim.
+4.  **Kontekst Ogólny:** Opis dostarczony przez użytkownika.
+
+${historyContextString}
 ${glossaryString}
-**Źródła prawdy (punkty odniesienia):**
-- **Pierwszorzędne (angielski, ${englishTranslation.lang}):** "${englishTranslation.value}"
+
+**Źródła Prawdy (punkty odniesienia):**
+- **Pierwszorzędne (angielski, ${englishTranslation?.lang || 'N/A'}):** "${englishTranslation?.value || 'N/A'}"
 - **Drugorzędne (polski, ${polishTranslation.lang}):** "${polishTranslation.value}"
 
-**Kontekst:** "${context}"
+**Kontekst Ogólny:** "${context}"
 
 **Zadanie:**
-Dla każdego tłumaczenia z listy poniżej (włączając w to polski i angielski), oceń je pod kątem obu źródeł prawdy oraz **Glosariusza**. Pamiętaj, że nawet tłumaczenia referencyjne (polski i angielski) mogą zawierać błędy, takie jak literówki czy błędy gramatyczne, które należy zidentyfikować i poprawić.
+Dla każdego tłumaczenia z listy poniżej (włączając w to polski i angielski), oceń je, ściśle przestrzegając podanej hierarchii ważności. Pamiętaj, że nawet tłumaczenia referencyjne mogą zawierać błędy, które należy zidentyfikować i poprawić.
 
 **W swojej ocenie, dla każdego języka:**
-1.  **'evaluation'**: Użyj jednej z wartości: 'Good', 'Needs Improvement', lub 'Incorrect'. Te wartości muszą pozostać w języku angielskim.
+1.  **'evaluation'**: Użyj jednej z wartości: 'Good', 'Needs Improvement', lub 'Incorrect'. Wartości muszą pozostać w języku angielskim.
 2.  **'feedback'**:
-    -   Napisz szczegółową opinię w języku polskim. Użyj podstawowego markdownu, aby poprawić czytelność (np. **pogrubienie**, listy z '-').
-    -   Jeśli występują różnice w stosunku do tłumaczenia angielskiego lub polskiego, podaj konkretne przykłady.
-    -   Wskaż, czy tłumaczenie jest zgodne z podanym kontekstem i **Glosariuszem**.
+    -   Napisz szczegółową opinię w języku polskim. Użyj podstawowego markdownu (np. **pogrubienie**).
+    -   **Krytycznie ważne:** Potwierdź, czy tłumaczenie jest zgodne z **Historią Zmian**. Jeśli nie, to jest błąd.
+    -   Następnie sprawdź zgodność z **Glosariuszem**. Zignorowanie reguły z glosariusza to błąd.
+    -   Na końcu oceń zgodność z ogólnym kontekstem i źródłami prawdy.
 3.  **'suggestion'**:
     -   Jeśli ocena to 'Needs Improvement' lub 'Incorrect', podaj **TYLKO I WYŁĄCZNIE sugerowany tekst tłumaczenia**.
     -   Pole 'suggestion' nie może zawierać żadnych dodatkowych opisów, cudzysłowów ani uzasadnień.
-    -   Sugestie MUSZĄ być **krótkie i zwięzłe**, odpowiednie dla interfejsu aplikacji (np. etykiety przycisków).
     -   Jeśli tłumaczenie jest 'Good', pomiń pole 'suggestion'.
 
 **Tłumaczenia do oceny:**
 ${translationsString}
 
 Zwróć odpowiedź w ustrukturyzowanym formacie JSON, zgodnie z podanym schematem.`;
-  } else {
-    // Fallback to original prompt if no English file is provided
-    prompt = `Jesteś ekspertem lingwistą i specjalistą od lokalizacji, oceniającym tłumaczenia dla interfejsu aplikacji. Twoje odpowiedzi (w polach 'feedback' i 'suggestion') MUSZĄ być w języku polskim.
-${glossaryString}
-**Kontekst:** "${context}"
-
-**Prawidłowe polskie (${polishTranslation.lang}) tłumaczenie (źródło prawdy):** "${polishTranslation.value}"
-
-**Zadanie:**
-Oceń poniższe tłumaczenia, używając polskiego tłumaczenia jako źródła prawdy oraz **Glosariusza**. Pamiętaj, że nawet polskie tłumaczenie referencyjne może zawierać błędy (np. literówki, błędy gramatyczne), które należy zidentyfikować i poprawić.
-
-**Dla każdego tłumaczenia:**
-1.  **'evaluation'**: Użyj jednej z wartości: 'Good', 'Needs Improvement', lub 'Incorrect' (wartości muszą pozostać po angielsku).
-2.  **'feedback'**: Napisz zwięzłą opinię w języku polskim. Użyj podstawowego markdownu dla lepszej czytelności (np. **pogrubienie**). Wskaż zgodność z **Glosariuszem**.
-3.  **'suggestion'**:
-    -   Jeśli ocena nie jest 'Good', podaj **TYLKO I WYŁĄCZNIE sugerowany tekst tłumaczenia**.
-    -   Pole 'suggestion' nie może zawierać żadnych dodatkowych opisów, cudzysłowów ani uzasadnień.
-    -   Sugestie MUSZĄ być **krótkie i zwięzle**, odpowiednie dla interfejsu aplikacji.
-    -   Jeśli tłumaczenie jest 'Good', pomiń pole 'suggestion'.
-
-**Tłumaczenia do oceny:**
-${translationsString}
-
-Zwróć odpowiedź w ustrukturyzowanym formacie JSON, zgodnie z podanym schematem.`;
-  }
-
 
   try {
     const response = await ai.models.generateContent({
@@ -127,7 +129,6 @@ Zwróć odpowiedź w ustrukturyzowanym formacie JSON, zgodnie z podanym schemate
     });
 
     const jsonText = response.text.trim();
-    // In case the API returns a markdown-wrapped JSON
     const cleanJsonText = jsonText.replace(/^```json\s*|```$/g, '');
     const parsed = JSON.parse(cleanJsonText);
     return parsed as AIAnalysisResult;

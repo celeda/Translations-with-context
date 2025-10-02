@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { TranslationFile, AIAnalysisResult, AnalysisItem, Glossary } from '../types';
+import type { TranslationFile, AIAnalysisResult, AnalysisItem, Glossary, TranslationHistory } from '../types';
 import { getValueByPath, getLineNumber } from '../services/translationService';
 import { analyzeTranslations } from '../services/aiService';
 import { CheckIcon, EditIcon, ClipboardIcon, SparklesIcon, PanelOpenIcon, PanelCloseIcon, BoltIcon, PlusCircleIcon } from './Icons';
@@ -14,6 +14,7 @@ interface TranslationViewProps {
   onUpdateContext: (newContext: string) => void;
   globalContext: Glossary;
   onUpdateGlossary: (glossary: Glossary) => void;
+  translationHistory: TranslationHistory;
 }
 
 interface ValueDisplayProps {
@@ -146,7 +147,7 @@ const EvaluationBadge: React.FC<{ evaluation: 'Good' | 'Needs Improvement' | 'In
   return <span className={`${baseClasses} ${styles[evaluation]}`}>{evaluation}</span>;
 };
 
-export const TranslationView: React.FC<TranslationViewProps> = ({ files, selectedKey, onUpdateValue, context: parentContext, onUpdateContext, globalContext, onUpdateGlossary }) => {
+export const TranslationView: React.FC<TranslationViewProps> = ({ files, selectedKey, onUpdateValue, context: parentContext, onUpdateContext, globalContext, onUpdateGlossary, translationHistory }) => {
   const [previewFileIndex, setPreviewFileIndex] = useState(0);
   const [isPreviewVisible, setIsPreviewVisible] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -234,12 +235,14 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
 
     try {
         const result = await analyzeTranslations(
+            selectedKey,
             localContext, 
             { lang: polishFile.name, value: polishValue }, 
             englishTranslation,
             otherTranslations, 
             selectedModel,
-            globalContext
+            globalContext,
+            translationHistory
         );
         setAnalysisResult(result);
     } catch (e: any) {
@@ -286,7 +289,13 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
   };
   
   const handleAddToGlossary = (sourceTerm: string, suggestedTranslation: string, language: string) => {
-    onUpdateGlossary({ ...globalContext, [sourceTerm]: suggestedTranslation });
+    const newGlossary = { ...globalContext };
+    if (!newGlossary[sourceTerm]) {
+      newGlossary[sourceTerm] = {};
+    }
+    newGlossary[sourceTerm][language] = suggestedTranslation;
+    onUpdateGlossary(newGlossary);
+
     setRecentlyAddedToGlossary(prev => new Set(prev).add(language));
     setTimeout(() => {
         setRecentlyAddedToGlossary(prev => {

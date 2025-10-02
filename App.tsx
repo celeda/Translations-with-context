@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import type { TranslationFile, Glossary } from './types';
+import type { TranslationFile, Glossary, TranslationHistory } from './types';
 import { flattenObjectKeys, setValueByPath, getValueByPath } from './services/translationService';
 import { FileUploader } from './components/FileUploader';
 import { TranslationKeyList } from './components/TranslationKeyList';
@@ -15,14 +15,16 @@ const App: React.FC = () => {
   const [translationFiles, setTranslationFiles] = useState<TranslationFile[]>([]);
   const [contexts, setContexts] = useState<Record<string, any>>({});
   const [globalContext, setGlobalContext] = useState<Glossary>({});
+  const [translationHistory, setTranslationHistory] = useState<TranslationHistory>({});
   const [allKeys, setAllKeys] = useState<string[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [isGlossaryOpen, setIsGlossaryOpen] = useState(false);
 
-  const handleFilesUpload = (uploadResult: { translationFiles: TranslationFile[], contexts: Record<string, string>, glossary: Glossary }) => {
+  const handleFilesUpload = (uploadResult: { translationFiles: TranslationFile[], contexts: Record<string, string>, glossary: Glossary, history: TranslationHistory }) => {
     setTranslationFiles(uploadResult.translationFiles);
     setContexts(uploadResult.contexts);
     setGlobalContext(uploadResult.glossary);
+    setTranslationHistory(uploadResult.history);
 
     const uploadedFiles = uploadResult.translationFiles;
     if (uploadedFiles.length > 0) {
@@ -39,7 +41,8 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUpdateValue = (fileName: string, key: string, newValue: any) => {
+  const handleUpdateValueAndHistory = (fileName: string, key: string, newValue: any) => {
+    // Update the main translation file data
     setTranslationFiles(prevFiles => {
       return prevFiles.map(file => {
         if (file.name === fileName) {
@@ -49,7 +52,14 @@ const App: React.FC = () => {
         return file;
       });
     });
+
+    // Update the translation history with the user's manual override
+    setTranslationHistory(prevHistory => {
+      const newHistoryForKey = { ...prevHistory[key], [fileName]: newValue };
+      return { ...prevHistory, [key]: newHistoryForKey };
+    });
   };
+
 
   const handleUpdateContext = (key: string, newContext: string) => {
     setContexts(prevContexts => {
@@ -83,6 +93,11 @@ const App: React.FC = () => {
         zip.file('glossary.json', glossaryString);
       }
       
+      if (Object.keys(translationHistory).length > 0) {
+        const historyString = JSON.stringify(translationHistory, null, 2);
+        zip.file('history.json', historyString);
+      }
+      
       const blob = await zip.generateAsync({ type: 'blob' });
       saveAs(blob, 'translations.zip');
 
@@ -101,6 +116,7 @@ const App: React.FC = () => {
         onClose={() => setIsGlossaryOpen(false)}
         glossary={globalContext}
         onUpdateGlossary={setGlobalContext}
+        languages={translationFiles.map(f => f.name)}
       />
       <div className="bg-gray-900 text-gray-200 flex flex-col h-full">
           {!hasFiles ? (
@@ -110,7 +126,7 @@ const App: React.FC = () => {
                     <LogoIcon className="h-10 w-10 text-teal-400" />
                     <h1 className="text-3xl font-bold text-gray-100">Translation AI Assistant</h1>
                 </div>
-                <p className="text-gray-400 mb-8">Start by uploading your JSON translation files and the required `context.json` file to compare and analyze them with AI. You can also include a `glossary.json` file for consistent terminology.</p>
+                <p className="text-gray-400 mb-8">Start by uploading your JSON translation files and `context.json`. You can also include `glossary.json` for consistent terminology and `history.json` to load previous manual edits.</p>
                 <FileUploader onFilesUploaded={handleFilesUpload} />
               </div>
             </main>
@@ -153,11 +169,12 @@ const App: React.FC = () => {
                     <TranslationView 
                         files={translationFiles}
                         selectedKey={selectedKey}
-                        onUpdateValue={handleUpdateValue}
+                        onUpdateValue={handleUpdateValueAndHistory}
                         context={getValueByPath(contexts, selectedKey) || ''}
                         onUpdateContext={(newContext) => handleUpdateContext(selectedKey, newContext)}
                         globalContext={globalContext}
                         onUpdateGlossary={setGlobalContext}
+                        translationHistory={translationHistory}
                     />
                 ) : (
                     <div className="flex items-center justify-center h-full bg-gray-800/30 rounded-lg">

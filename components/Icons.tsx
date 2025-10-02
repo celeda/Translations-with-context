@@ -99,3 +99,9 @@ export const ListBulletIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) =
     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
   </svg>
 );
+
+export const LightBulbIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 14.25h3m-6.75 3h9.75m-1.5-12a3 3 0 0 0-3-3h-1.5a3 3 0 0 0-3 3v4.5A3.75 3.75 0 0 0 9 18h6a3.75 3.75 0 0 0 3.75-3.75V7.5a3 3 0 0 0-3-3h-1.5Z" />
+  </svg>
+);

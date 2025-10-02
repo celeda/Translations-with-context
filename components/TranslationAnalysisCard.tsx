@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { TranslationFile, AIAnalysisResult, AnalysisItem, Glossary, TranslationHistory } from '../types';
 import { getValueByPath, getLineNumber } from '../services/translationService';
-import { analyzeTranslations } from '../services/aiService';
-import { CheckIcon, EditIcon, ClipboardIcon, SparklesIcon, PanelOpenIcon, PanelCloseIcon, BoltIcon, PlusCircleIcon } from './Icons';
+import { analyzeTranslations, generateContextForKey } from '../services/aiService';
+import { CheckIcon, EditIcon, ClipboardIcon, SparklesIcon, PanelOpenIcon, PanelCloseIcon, BoltIcon, PlusCircleIcon, LightBulbIcon } from './Icons';
 import { JsonFileViewer } from './JsonFileViewer';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
@@ -200,6 +200,26 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
         onUpdateContext(localContext);
     }
   };
+  
+  const handleSuggestContext = async () => {
+    setIsLoading(true);
+    setError(null);
+    setAnalysisResult(null);
+
+    const allTranslations = files.map(f => ({
+        lang: f.name,
+        value: String(getValueByPath(f.data, translationKey) || ''),
+    }));
+
+    try {
+        const suggestedContext = await generateContextForKey(translationKey, allTranslations, selectedModel);
+        setLocalContext(suggestedContext);
+    } catch (e: any) {
+        setError(e.message || "An unknown error occurred while suggesting context.");
+    } finally {
+        setIsLoading(false);
+    }
+  };
 
   const handleAnalyze = async () => {
     if (localContext !== parentContext) {
@@ -214,12 +234,6 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
 
     if (!polishFile) {
         setError("A Polish translation file (e.g., 'pl.json') is required as a reference for analysis.");
-        setIsLoading(false);
-        return;
-    }
-    
-    if (!localContext.trim()) {
-        setError("Context is required for AI analysis. Please add a context for this key first.");
         setIsLoading(false);
         return;
     }
@@ -320,6 +334,7 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
     }, 2000);
   };
 
+  const isContextEmpty = !localContext.trim();
 
   return (
     <div className="flex-grow flex flex-col bg-gray-800/50 rounded-lg overflow-hidden h-full">
@@ -357,12 +372,21 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
                 </select>
             </div>
             <button 
-                onClick={handleAnalyze}
-                disabled={!localContext.trim() || isLoading}
+                onClick={isContextEmpty ? handleSuggestContext : handleAnalyze}
+                disabled={isLoading}
                 className="flex items-center space-x-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200 disabled:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
-                <SparklesIcon className="w-5 h-5"/>
-                <span>{isLoading ? 'Analyzing...' : 'Analyze with AI'}</span>
+                {isContextEmpty ? (
+                    <>
+                        <LightBulbIcon className="w-5 h-5"/>
+                        <span>{isLoading ? 'Suggesting...' : 'Suggest Context with AI'}</span>
+                    </>
+                ) : (
+                    <>
+                        <SparklesIcon className="w-5 h-5"/>
+                        <span>{isLoading ? 'Analyzing...' : 'Analyze with AI'}</span>
+                    </>
+                )}
             </button>
         </div>
       </div>
@@ -461,7 +485,13 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
                               <ValueDisplay value={value} onSave={handleSave} />
                             </td>
                             <td className="p-3 align-top text-sm">
-                                {isLoading && (
+                                {isLoading && isContextEmpty && (
+                                    <div className="flex items-center space-x-2 text-gray-400">
+                                        <div className="w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
+                                        <span>Suggesting...</span>
+                                    </div>
+                                )}
+                                {isLoading && !isContextEmpty && (
                                     <div className="flex items-center space-x-2 text-gray-400">
                                         <div className="w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
                                         <span>Analyzing...</span>

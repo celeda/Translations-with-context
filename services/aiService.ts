@@ -148,3 +148,45 @@ Zwróć odpowiedź w ustrukturyzowanym formacie JSON, zgodnie z podanym schemate
     throw new Error("Failed to get analysis from AI. An unknown error occurred. Please check the console for more details.");
   }
 };
+
+export const generateContextForKey = async (
+  translationKey: string,
+  translations: { lang: string; value: string }[],
+  model: string
+): Promise<string> => {
+  const translationsString = translations
+    .map(t => `- Language: ${t.lang}, Translation: "${t.value}"`)
+    .join('\n');
+
+  const prompt = `Jesteś specjalistą od UX i lokalizacji. Twoim zadaniem jest stworzenie krótkiego, ale precyzyjnego opisu kontekstu dla klucza tłumaczenia w aplikacji. Opis musi być w języku polskim. Na podstawie nazwy klucza i jego istniejących wartości, opisz, gdzie i w jakim celu ten tekst może być używany w interfejsie użytkownika.
+
+Klucz: "${translationKey}"
+
+Istniejące Tłumaczenia:
+${translationsString}
+
+Sugerowany Kontekst (odpowiedz TYLKO I WYŁĄCZNIE sugerowanym tekstem opisu, bez żadnych dodatkowych wstępów, formatowania markdown, cudzysłowów czy nagłówków typu "Sugerowany Kontekst:"):`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: prompt,
+    });
+
+    return response.text.trim();
+
+  } catch (error) {
+    console.error("Error generating context with AI:", error);
+    const errorMessage = String(error);
+
+    if (errorMessage.includes("PERMISSION_DENIED") || errorMessage.includes("403")) {
+        throw new Error("AI context suggestion failed due to a permission error. Please ensure the API key is valid and has the necessary permissions enabled.");
+    }
+
+    if (errorMessage.toLowerCase().includes("api key not valid")) {
+        throw new Error("AI context suggestion failed: The provided API key is not valid. Please check your API key and try again.");
+    }
+
+    throw new Error("Failed to get context suggestion from AI. An unknown error occurred. Please check the console for more details.");
+  }
+};

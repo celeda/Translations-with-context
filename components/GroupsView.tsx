@@ -1,5 +1,6 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
-import type { TranslationFile, Glossary, TranslationHistory, TranslationGroup, AIAnalysisResult } from '../types';
+import type { TranslationFile, TranslationHistory, TranslationGroup, AIAnalysisResult } from '../types';
 import { getValueByPath } from '../services/translationService';
 import { analyzeTranslations, buildAnalysisPrompt } from '../services/aiService';
 import { SearchIcon, PlusCircleIcon, SparklesIcon, CollectionIcon, TrashIcon, EditIcon, StarIcon, CodeBracketIcon } from './Icons';
@@ -12,13 +13,11 @@ interface GroupsViewProps {
     allKeys: string[];
     files: TranslationFile[];
     contexts: Record<string, any>;
-    globalContext: Glossary;
     translationHistory: TranslationHistory;
     groups: TranslationGroup[];
     onUpdateGroups: (groups: TranslationGroup[]) => void;
     onUpdateValue: (fileName: string, key: string, newValue: any) => void;
     onUpdateContext: (key: string, newContext: string) => void;
-    onUpdateGlossary: (glossary: Glossary) => void;
     groupMode: GroupMode;
     selectedGroupId: string | null;
     onSetGroupMode: (mode: GroupMode) => void;
@@ -41,6 +40,8 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
         selectedKeys: new Set<string>(),
         referenceKeys: new Set<string>(),
     });
+
+    const [editedPolishValues, setEditedPolishValues] = useState<Record<string, string>>({});
     
     // State for viewing/analyzing a group
     const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -78,6 +79,7 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
         setAnalysisData({});
         setIsAnalyzing(false);
         setCollapsedKeys(new Set());
+        setEditedPolishValues({});
     }, [selectedGroupId]);
 
 
@@ -86,6 +88,7 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
             name: '', context: '', searchQuery: '',
             selectedKeys: new Set(), referenceKeys: new Set(),
         });
+        setEditedPolishValues({});
     };
     
     const handleCancelForm = () => {
@@ -95,8 +98,8 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
     
     const handleSaveGroup = () => {
         const { name, context, selectedKeys, referenceKeys } = formState;
-        if (!name.trim() || !context.trim() || selectedKeys.size === 0) {
-            alert("Group name, context, and at least one selected key are required.");
+        if (!name.trim() || selectedKeys.size === 0) {
+            alert("Group name and at least one selected key are required.");
             return;
         }
 
@@ -203,7 +206,7 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
             translations: files.map(f => ({ lang: f.name, value: String(getValueByPath(f.data, refKey) || '') }))
         }));
         
-        const polishValue = String(getValueByPath(polishFile.data, sampleKey) || '');
+        const polishValue = editedPolishValues[sampleKey] ?? String(getValueByPath(polishFile.data, sampleKey) || '');
         const englishTranslation = englishFile ? { lang: englishFile.name, value: String(getValueByPath(englishFile.data, sampleKey) || '') } : null;
         const otherTranslations = props.files
             .filter(f => f.name !== polishFile.name && f.name !== englishFile?.name)
@@ -211,7 +214,7 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
             
         const prompt = buildAnalysisPrompt(
             sampleKey, group.context, { lang: polishFile.name, value: polishValue }, englishTranslation, otherTranslations,
-            props.globalContext, props.translationHistory, referenceTranslations
+            props.translationHistory, referenceTranslations
         );
 
         setGeneratedPrompt(prompt);
@@ -237,7 +240,7 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
         }));
 
         const analysisPromises = group.keys.map(key => {
-            const polishValue = String(getValueByPath(polishFile.data, key) || '');
+            const polishValue = editedPolishValues[key] ?? String(getValueByPath(polishFile.data, key) || '');
             const englishTranslation = englishFile ? { lang: englishFile.name, value: String(getValueByPath(englishFile.data, key) || '') } : null;
             const otherTranslations = props.files
                 .filter(f => f.name !== polishFile.name && f.name !== englishFile?.name)
@@ -245,7 +248,7 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
             
             return analyzeTranslations(
                 key, group.context, { lang: polishFile.name, value: polishValue }, englishTranslation, otherTranslations,
-                props.globalContext, props.translationHistory, referenceTranslations
+                props.translationHistory, referenceTranslations
             )
             .then(result => ({ key, status: 'fulfilled', value: result }))
             .catch(error => ({ key, status: 'rejected', reason: error as Error }));
@@ -275,7 +278,7 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
                 <h2 className="text-lg font-semibold text-gray-100">{groupMode === 'create' ? 'Create a New Context Group' : `Editing Group: ${formState.name}`}</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <input type="text" placeholder="Group Name*" value={formState.name} onChange={e => setFormState(s=>({...s, name: e.target.value}))} className="bg-gray-900 border border-gray-600 rounded-md py-2 px-3 text-gray-200" />
-                    <input type="text" placeholder="Group Context*" value={formState.context} onChange={e => setFormState(s=>({...s, context: e.target.value}))} className="bg-gray-900 border border-gray-600 rounded-md py-2 px-3 text-gray-200" />
+                    <input type="text" placeholder="Sugestie i uwagi dla tłumacza" value={formState.context} onChange={e => setFormState(s=>({...s, context: e.target.value}))} className="bg-gray-900 border border-gray-600 rounded-md py-2 px-3 text-gray-200" />
                 </div>
                  <div className="relative">
                     <input type="text" placeholder="Search to add/filter keys..." value={formState.searchQuery} onChange={e => setFormState(s=>({...s, searchQuery: e.target.value}))} className="w-full bg-gray-900 border border-gray-600 rounded-md py-2 pl-10 pr-4 text-gray-200"/>
@@ -289,7 +292,7 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
                             <th className="p-2 w-12 text-center"><input type="checkbox" className="rounded" onChange={(e) => setFormState(s => ({...s, selectedKeys: e.target.checked ? new Set(searchResults) : new Set()}))} checked={searchResults.length > 0 && formState.selectedKeys.size >= searchResults.length}/></th>
                             <th className="p-2 w-12 text-center">Ref</th>
                             <th className="p-2">Key</th>
-                            <th className="p-2 w-1/4">Polish Value</th>
+                            <th className="p-2 w-1/3">Polish Value</th>
                             <th className="p-2 w-1/3">Key Context</th>
                         </tr>
                     </thead>
@@ -303,7 +306,14 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
                                     </button>
                                 </td>
                                 <td className="p-2 font-mono text-teal-300 break-words">{key}</td>
-                                <td className="p-2 text-gray-300 break-words">{polishFile ? String(getValueByPath(polishFile.data, key) || 'N/A') : 'N/A'}</td>
+                                <td className="p-2">
+                                    <textarea
+                                        rows={2}
+                                        value={editedPolishValues[key] ?? (polishFile ? String(getValueByPath(polishFile.data, key) || '') : '')}
+                                        onChange={(e) => setEditedPolishValues(prev => ({ ...prev, [key]: e.target.value }))}
+                                        className="w-full bg-transparent p-1 border border-transparent hover:border-gray-600 focus:border-teal-500 rounded resize-y text-gray-300"
+                                    />
+                                </td>
                                 <td className="p-2 text-gray-400 italic">
                                     <textarea rows={2} value={getValueByPath(contexts, key) || ''} onChange={(e) => props.onUpdateContext(key, e.target.value)} className="w-full bg-transparent p-1 border border-transparent hover:border-gray-600 focus:border-teal-500 rounded resize-y"/>
                                 </td>
@@ -389,11 +399,9 @@ export const GroupsView: React.FC<GroupsViewProps> = (props) => {
                             translationKey={key}
                             files={props.files}
                             context={group.context} 
-                            globalContext={props.globalContext}
                             translationHistory={props.translationHistory}
                             onUpdateValue={props.onUpdateValue}
                             onUpdateContext={() => {}}
-                            onUpdateGlossary={props.onUpdateGlossary}
                             showFilePreview={false}
                             showAnalysisControls={false}
                             analysisResult={keyAnalysis?.result}

@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { SearchIcon } from './Icons';
 import type { TranslationFile } from '../types';

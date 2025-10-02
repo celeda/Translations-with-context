@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import type { Glossary } from '../types';
 import { BookOpenIcon, CloseIcon, CheckIcon, EditIcon, TrashIcon, PlusCircleIcon, DownloadIcon, UploadIcon } from './Icons';

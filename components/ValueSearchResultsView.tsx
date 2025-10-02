@@ -1,5 +1,6 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import type { TranslationFile, Glossary, TranslationHistory, AIAnalysisResult } from '../types';
+import type { TranslationFile, TranslationHistory, AIAnalysisResult } from '../types';
 import { TranslationAnalysisCard } from './TranslationAnalysisCard';
 import { getValueByPath } from '../services/translationService';
 import { analyzeTranslations, buildAnalysisPrompt } from '../services/aiService';
@@ -11,11 +12,9 @@ interface ValueSearchResultsViewProps {
   searchQuery: { term: string; lang: string } | null;
   files: TranslationFile[];
   contexts: Record<string, any>;
-  globalContext: Glossary;
   translationHistory: TranslationHistory;
   onUpdateValue: (fileName: string, key: string, newValue: any) => void;
   onUpdateContext: (key: string, newContext: string) => void;
-  onUpdateGlossary: (glossary: Glossary) => void;
 }
 
 export const ValueSearchResultsView: React.FC<ValueSearchResultsViewProps> = (props) => {
@@ -70,7 +69,7 @@ export const ValueSearchResultsView: React.FC<ValueSearchResultsViewProps> = (pr
         
         const prompt = buildAnalysisPrompt(
             sampleKey, context, { lang: polishFile.name, value: polishValue }, englishTranslation, otherTranslations,
-            props.globalContext, props.translationHistory
+            props.translationHistory
         );
         
         setGeneratedPrompt(prompt);
@@ -99,7 +98,7 @@ export const ValueSearchResultsView: React.FC<ValueSearchResultsViewProps> = (pr
             
             return analyzeTranslations(
                 key, context, { lang: polishFile.name, value: polishValue }, englishTranslation, otherTranslations,
-                props.globalContext, props.translationHistory
+                props.translationHistory
             )
             .then(result => ({ key, status: 'fulfilled', value: result }))
             .catch(error => ({ key, status: 'rejected', reason: error as Error }));
@@ -189,11 +188,9 @@ export const ValueSearchResultsView: React.FC<ValueSearchResultsViewProps> = (pr
                             translationKey={key}
                             files={props.files}
                             context={getValueByPath(props.contexts, key) || ''}
-                            globalContext={props.globalContext}
                             translationHistory={props.translationHistory}
                             onUpdateValue={props.onUpdateValue}
                             onUpdateContext={(newContext) => props.onUpdateContext(key, newContext)}
-                            onUpdateGlossary={props.onUpdateGlossary}
                             showFilePreview={false}
                             showAnalysisControls={false}
                             analysisResult={keyAnalysis?.result}

@@ -1,3 +1,4 @@
+
 export interface TranslationFile {
   name: string;
   data: Record<string, any>;
@@ -14,10 +15,6 @@ export interface AIAnalysisResult {
   analysis: AnalysisItem[];
 }
 
-// Maps a source term (e.g., Polish) to its translations in other languages.
-// Example: { "zapisz": { "en": "Save", "de": "Speichern" } }
-export type Glossary = Record<string, Record<string, string>>;
-
 // Stores user's manual overrides for specific translation keys.
 // This acts as a translation memory.
 // Example: { "buttons.submit": { "en": "Submit Application" } }
@@ -31,7 +28,13 @@ export interface TranslationGroup {
   referenceKeys: string[];
 }
 
+// FIX: Add Glossary type definition.
+// Defines the structure for the multi-language glossary.
+// Example: { "Submit": { "pl": "Zatwierdź", "de": "Senden" } }
+export type Glossary = Record<string, Record<string, string>>;
+
+// FIX: Add BulkTranslationSuggestion type definition.
 export interface BulkTranslationSuggestion {
     key: string;
-    suggestions: Record<string, string>; // lang -> suggestion
+    suggestions: Record<string, string>;
 }

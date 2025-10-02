@@ -1,5 +1,6 @@
+
 import React, { useState, useCallback } from 'react';
-import type { TranslationFile, Glossary, TranslationHistory, TranslationGroup } from '../types';
+import type { TranslationFile, TranslationHistory, TranslationGroup } from '../types';
 import { UploadIcon } from './Icons';
 
 // JSZip is loaded from a script tag in index.html
@@ -9,10 +10,8 @@ interface FileUploaderProps {
   onFilesUploaded: (result: { 
       translationFiles: TranslationFile[], 
       contexts: Record<string, string>, 
-      glossary: Glossary, 
       history: TranslationHistory, 
       groups: TranslationGroup[],
-      appGlobalContext: string 
   }) => void;
   compact?: boolean;
 }
@@ -25,7 +24,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFilesUploaded, com
     setError(null);
     let filesToProcess: {name: string, text: () => Promise<string>}[] = Array.from(fileList).map(f => ({ name: f.name, text: () => f.text() }));
 
-    const defaultResult = { translationFiles: [], contexts: {}, glossary: {}, history: {}, groups: [], appGlobalContext: '' };
+    const defaultResult = { translationFiles: [], contexts: {}, history: {}, groups: [] };
 
     if (filesToProcess.length === 1 && (filesToProcess[0].name.endsWith('.zip') || fileList[0].type === 'application/zip')) {
       try {
@@ -52,10 +51,8 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFilesUploaded, com
 
     const translationFiles: TranslationFile[] = [];
     let contexts: Record<string, string> = {};
-    let glossary: Glossary = {};
     let history: TranslationHistory = {};
     let groups: TranslationGroup[] = [];
-    let appGlobalContext: string = '';
 
     for (const file of filesToProcess) {
       if (!file.name.endsWith('.json')) {
@@ -69,14 +66,10 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFilesUploaded, com
         
         if (file.name === 'context.json') {
           contexts = data;
-        } else if (file.name === 'glossary.json') {
-          glossary = data;
         } else if (file.name === 'history.json') {
           history = data;
         } else if (file.name === 'groups.json') {
           groups = data;
-        } else if (file.name === 'app_context.json') {
-          appGlobalContext = data.context || '';
         } else {
           const fileName = file.name.replace('.json', '');
           translationFiles.push({ name: fileName, data });
@@ -100,7 +93,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFilesUploaded, com
         return;
     }
 
-    onFilesUploaded({ translationFiles, contexts, glossary, history, groups, appGlobalContext });
+    onFilesUploaded({ translationFiles, contexts, history, groups });
   }, [onFilesUploaded]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -170,7 +163,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFilesUploaded, com
             <span className="font-semibold text-teal-400">Click to upload</span> or drag and drop
           </p>
           <p className="text-xs text-gray-500">JSON files or a single ZIP file</p>
-          <p className="text-xs text-gray-500 mt-1">Required: `context.json`. Optional: `glossary.json`, `history.json`, `groups.json`, `app_context.json`</p>
+          <p className="text-xs text-gray-500 mt-1">Required: `context.json`. Optional: `history.json`, `groups.json`</p>
         </div>
         <input 
           id="file-upload" 

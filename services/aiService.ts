@@ -1,5 +1,6 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
-import type { AIAnalysisResult, Glossary, TranslationHistory, TranslationFile } from '../types';
+import type { AIAnalysisResult, TranslationHistory, TranslationFile } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
@@ -26,25 +27,6 @@ const analysisSchema = {
   required: ["analysis"]
 };
 
-const bulkTranslationSchema = {
-    type: Type.OBJECT,
-    properties: {
-        translations: {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    language: { type: Type.STRING },
-                    translation: { type: Type.STRING }
-                },
-                required: ["language", "translation"]
-            }
-        }
-    },
-    required: ["translations"]
-};
-
-
 const polishFileFinder = (f: { name: string }) => f.name.toLowerCase().includes('pl') || f.name.toLowerCase().includes('polish');
 
 export const buildAnalysisPrompt = (
@@ -53,7 +35,6 @@ export const buildAnalysisPrompt = (
   polishTranslation: { lang: string; value: string },
   englishTranslation: { lang: string; value: string } | null,
   translationsToReview: { lang: string; value: string }[],
-  globalContext: Glossary,
   translationHistory: TranslationHistory,
   groupReferenceTranslations?: { key: string; translations: { lang: string; value: string }[] }[]
 ): string => {
@@ -91,60 +72,44 @@ ${referenceEntries}
         if (historyEntries) {
         historyContextString = `
 **Historia Zmian (NAJWYŻSZY PRIORYTET):**
-Dla klucza '${translationKey}', użytkownik ręcznie zapisał poniższe wersje. Są to absolutnie ostateczne i poprawne tłumaczenia, które mają pierwszeństwo przed wszystkimi innymi regułami, włączając glosariusz. Każde odstępstwo od tej historii jest błędem krytycznym.
-${historyEntries}
+Dla klucza '${translationKey}', użytkownik ręcznie zapisał poniższe wersje. Są to absolutnie ostateczne i poprawne tłumaczenia, które mają pierwszeństwo przed wszystkimi innymi regułami. Każde odstępstwo od tej historii jest błędem krytycznym.
 `;
         }
     }
 
-    let glossaryString = "";
-    if (globalContext && Object.keys(globalContext).length > 0) {
-        const glossaryEntries = Object.entries(globalContext)
-        .map(([key, translations]) => {
-            const rules = Object.entries(translations)
-            .map(([lang, value]) => `  - W języku '${lang}', termin ten MUSI być tłumaczony jako "${value}".`)
-            .join('\n');
-            return `- Dla terminu źródłowego "${key}":\n${rules}`;
-        })
-        .join('\n');
-        
-        glossaryString = `
-**Glosariusz Terminologiczny (Wysoki Priorytet):**
-Poniższe reguły są obowiązkowe. Mają one pierwszeństwo przed ogólnym kontekstem, ale niższy priorytet niż 'Wzorce Kontekstowe' i 'Historia Zmian'.
-${glossaryEntries}
-`;
-    }
+    const prompt = `Jesteś światowej klasy ekspertem lingwistycznym, specjalizującym się w lokalizacji oprogramowania. Twoja praca wymaga absolutnej precyzji. Twoje odpowiedzi (w polach 'feedback' i 'suggestion') MUSZĄ być w języku polskim.
 
-    const prompt = `Jesteś ekspertem lingwistą i specjalistą od lokalizacji. Twoim zadaniem jest szczegółowa ocena tłumaczeń dla interfejsu aplikacji. Twoje odpowiedzi (w polach 'feedback' i 'suggestion') MUSZĄ być w języku polskim.
+**KRYTYCZNE INSTRUKCJE ZADANIA (NAJWYŻSZY PRIORYTET):**
+1.  **ABSOLUTNE ŹRÓDŁO PRAWDY:** Tłumaczenie w języku polskim (PL) jest **jedynym i ostatecznym** punktem odniesienia. Wszystkie inne tłumaczenia, włącznie z angielskim, muszą być oceniane **WYŁĄCZNIE** pod kątem zgodności z wersją polską pod względem znaczenia, tonu i kontekstu.
+2.  **ROLA JĘZYKA ANGIELSKIEGO:** Tłumaczenie angielskie (EN) służy **jedynie jako dodatkowy kontekst**, który może pomóc w zrozumieniu intencji, ale **NIGDY** nie może być traktowane jako wzorzec, jeśli jest niezgodne z wersją polską.
+3.  **ZAKAZ INNYCH REFERENCJI:** Pod żadnym pozorem nie używaj żadnego innego języka (np. włoskiego, niemieckiego, hiszpańskiego) jako punktu odniesienia w swojej ocenie. Twoja analiza musi być zakotwiczona w polskim tekście. Każde odwołanie do innego języka jako wzorca jest **błędem krytycznym**.
 
-**Hierarchia Ważności Informacji (od najważniejszej):**
-1.  **Wzorce Kontekstowe Grupy:** Klucze wzorcowe zdefiniowane przez użytkownika dla tej grupy.
+Poza powyższymi regułami, obowiązuje następująca hierarchia ważności informacji:
+1.  **Wzorce Kontekstowe Grupy:** Klucze wzorcowe zdefiniowane przez użytkownika. Mają one bezwzględny priorytet.
 2.  **Historia Zmian:** Ostateczne, ręcznie zapisane przez użytkownika wersje.
-3.  **Glosariusz Terminologiczny:** Zdefiniowane tłumaczenia dla konkretnych terminów.
-4.  **Źródła Prawdy (Referencje):** Tłumaczenia w języku angielskim i polskim.
-5.  **Kontekst Ogólny:** Opis dostarczony przez użytkownika.
+3.  **Źródło Prawdy (Polski):** Jak zdefiniowano w krytycznych instrukcjach.
+4.  **Kontekst Ogólny:** Opis dostarczony przez użytkownika.
 
 ${groupReferenceString}
 ${historyContextString}
-${glossaryString}
 
-**Źródła Prawdy (punkty odniesienia):**
-- **Pierwszorzędne (angielski, ${englishTranslation?.lang || 'N/A'}):** "${englishTranslation?.value || 'N/A'}"
-- **Drugorzędne (polski, ${polishTranslation.lang}):** "${polishTranslation.value}"
+**ABSOLUTNE ŹRÓDŁO PRAWDY (POLSKI - ${polishTranslation.lang}):**
+"${polishTranslation.value}"
+
+**DODATKOWY PUNKT ODNIESIENIA (ANGIELSKI - ${englishTranslation?.lang || 'N/A'}):**
+"${englishTranslation?.value || 'N/A'}"
 
 **Kontekst Ogólny:** "${context}"
 
 **Zadanie:**
-Dla każdego tłumaczenia z listy poniżej, zastosuj następujący, rygorystyczny proces oceny:
-1.  **Ustal Wzorzec:** Najpierw ustal **idealne, poprawne znaczenie** dla klucza, bazując na obu źródłach prawdy (PL i EN) oraz dostępnym kontekście. Jeśli stwierdzisz, że tłumaczenia referencyjne (PL/EN) są niepoprawne lub nieprecyzyjne, **najpierw w myśli sformułuj ich poprawną wersję**.
-2.  **Porównaj i Oceń:** Użyj tego idealnego, skorygowanego wzorca do oceny **WSZYSTKICH** podanych tłumaczeń (włącznie z oryginalnym polskim i angielskim). Twoja ocena musi być spójna z tym wzorcem i podaną hierarchią ważności.
+Dla każdego tłumaczenia z listy poniżej, wykonaj rygorystyczną ocenę, ściśle trzymając się podanych instrukcji. Porównaj każde tłumaczenie z **polską wersją referencyjną**.
 
 **W swojej ocenie, dla każdego języka:**
 1.  **'evaluation'**: Użyj jednej z wartości: 'Good', 'Needs Improvement', lub 'Incorrect'. Wartości muszą pozostać w języku angielskim.
 2.  **'feedback'**:
     -   Napisz zwięzłą i szczegółową opinię w języku polskim, która uzasadnia Twoją ocenę ('evaluation'). Użyj podstawowego markdownu (np. **pogrubienie**).
-    -   Skup się wyłącznie na jakości tłumaczenia: jego poprawności gramatycznej, stylistycznej i zgodności z ustalonym wzorcem i kontekstem.
-    -   **Nie wspominaj w komentarzu o "Glosariuszu", "Historii Zmian" ani o "Wzorcach Grupy".** Twoja ocena musi być oparta na tych regułach, ale uzasadnienie powinno dotyczyć samego tekstu. Na przykład, zamiast pisać "Niezgodne z glosariuszem", napisz "Słowo 'Zapisz' jest lepsze w tym kontekście niż 'Archiwizuj'".
+    -   Skup się wyłącznie na jakości tłumaczenia.
+    -   **Nie wspominaj w komentarzu o "Glosariuszu", "Historii Zmian" ani o "Wzorcach Grupy".** Twoja ocena musi być oparta na tych regułach, ale uzasadnienie powinno dotyczyć samego tekstu.
 3.  **'suggestion'**:
     -   Jeśli ocena to 'Needs Improvement' lub 'Incorrect', podaj **TYLKO I WYŁĄCZNIE sugerowany tekst tłumaczenia**.
     -   Pole 'suggestion' nie może zawierać żadnych dodatkowych opisów, cudzysłowów ani uzasadnień.
@@ -164,14 +129,13 @@ export const analyzeTranslations = async (
   polishTranslation: { lang: string; value: string },
   englishTranslation: { lang: string; value: string } | null,
   translationsToReview: { lang: string; value: string }[],
-  globalContext: Glossary,
   translationHistory: TranslationHistory,
   groupReferenceTranslations?: { key: string; translations: { lang: string; value: string }[] }[]
 ): Promise<AIAnalysisResult> => {
   
   const prompt = buildAnalysisPrompt(
     translationKey, context, polishTranslation, englishTranslation, translationsToReview,
-    globalContext, translationHistory, groupReferenceTranslations
+    translationHistory, groupReferenceTranslations
   );
 
   try {
@@ -255,100 +219,4 @@ export const generateContextForKey = async (
 
     throw new Error("Failed to get context suggestion from AI. An unknown error occurred. Please check the console for more details.");
   }
-};
-
-export const buildBulkTranslatePrompt = (
-    appContext: string,
-    glossary: Glossary,
-    translationKey: string,
-    keyContext: string,
-    polishValue: string,
-    englishValue: string | null,
-    targetLangs: string[]
-): string => {
-    let glossaryString = "";
-    if (glossary && Object.keys(glossary).length > 0) {
-        const glossaryEntries = Object.entries(glossary)
-            .map(([key, translations]) => {
-                const rules = Object.entries(translations)
-                    .map(([lang, value]) => `  - W języku '${lang}', termin ten MUSI być tłumaczony jako "${value}".`)
-                    .join('\n');
-                return `- Dla terminu źródłowego "${key}":\n${rules}`;
-            })
-            .join('\n');
-
-        glossaryString = `
-**Glosariusz Terminologiczny (Wysoki Priorytet):**
-Poniższe reguły terminologiczne są obowiązkowe i muszą być ściśle przestrzegane.
-${glossaryEntries}
-`;
-    }
-
-    return `Jesteś ekspertem od lokalizacji oprogramowania. Twoim zadaniem jest przetłumaczenie klucza interfejsu użytkownika na listę podanych języków, zachowując najwyższą jakość i spójność.
-
-**Hierarchia Kontekstu (od najważniejszej):**
-1.  **Glosariusz Terminologiczny:** Zdefiniowane tłumaczenia dla konkretnych terminów są absolutnie nadrzędne.
-2.  **Kontekst Klucza:** Opis funkcjonalności danego klucza.
-3.  **Kontekst Globalny Aplikacji:** Ogólny opis aplikacji, jej tonu i grupy docelowej.
-
----
-
-**Kontekst Globalny Aplikacji:**
-${appContext || "Brak globalnego kontekstu."}
-
----
-${glossaryString}
----
-
-**Zadanie do wykonania:**
-
-Przetłumacz poniższy klucz, opierając się na źródłowych tłumaczeniach (polskim i angielskim) oraz dostarczonych kontekstach.
-
--   **Klucz:** \`${translationKey}\`
--   **Kontekst Klucza:** ${keyContext || "Brak specyficznego kontekstu dla tego klucza."}
--   **Tłumaczenie Źródłowe (Polski):** "${polishValue}"
--   **Tłumaczenie Źródłowe (Angielski):** "${englishValue || 'N/A'}"
-
-**Języki Docelowe:** ${targetLangs.join(', ')}
-
-**Instrukcje Wyjściowe:**
--   Zwróć odpowiedź w formacie JSON.
--   Dla każdego języka docelowego podaj sugerowane tłumaczenie.
--   Tłumaczenia muszą być precyzyjne, naturalne i spójne z podanymi kontekstami.
--   Jeśli tłumaczenie źródłowe zawiera zmienne (np. \`{value}\`), zachowaj je w identycznej formie w swoich tłumaczeniach.
--   Zwróć TYLKO I WYŁĄCZNIE prawidłowy JSON zgodny ze schematem. Nie dodawaj żadnych wyjaśnień ani formatowania markdown.`;
-};
-
-
-export const bulkTranslate = async (
-    appContext: string,
-    glossary: Glossary,
-    translationKey: string,
-    keyContext: string,
-    polishValue: string,
-    englishValue: string | null,
-    targetLangs: string[]
-): Promise<{ language: string; translation: string }[]> => {
-
-    const prompt = buildBulkTranslatePrompt(appContext, glossary, translationKey, keyContext, polishValue, englishValue, targetLangs);
-
-    try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: bulkTranslationSchema,
-            },
-        });
-
-        const jsonText = response.text.trim();
-        const cleanJsonText = jsonText.replace(/^```json\s*|```$/g, '');
-        const parsed = JSON.parse(cleanJsonText);
-        return parsed.translations as { language: string; translation: string }[];
-
-    } catch (error) {
-        console.error(`Error bulk translating key "${translationKey}" with AI:`, error);
-        throw new Error(`Failed to get bulk translation for key: ${translationKey}.`);
-    }
 };

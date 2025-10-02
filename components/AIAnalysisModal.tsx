@@ -1,3 +1,4 @@
+
 import React from 'react';
 import type { AIAnalysisResult } from '../types';
 import { CloseIcon, SparklesIcon } from './Icons';

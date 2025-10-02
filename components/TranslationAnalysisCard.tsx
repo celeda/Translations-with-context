@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import type { TranslationFile, AIAnalysisResult, AnalysisItem, Glossary, TranslationHistory } from '../types';
+import type { TranslationFile, AIAnalysisResult, AnalysisItem, TranslationHistory } from '../types';
 import { getValueByPath, getLineNumber } from '../services/translationService';
 import { analyzeTranslations, generateContextForKey, buildAnalysisPrompt, buildGenerateContextPrompt } from '../services/aiService';
 import { CheckIcon, EditIcon, ClipboardIcon, SparklesIcon, PanelOpenIcon, PanelCloseIcon, BoltIcon, PlusCircleIcon, LightBulbIcon, CloseIcon, CodeBracketIcon, ChevronDownIcon, ChevronUpIcon } from './Icons';
@@ -14,8 +15,6 @@ interface TranslationAnalysisCardProps {
   onUpdateValue: (fileName: string, key: string, newValue: any) => void;
   context: string;
   onUpdateContext: (newContext: string) => void;
-  globalContext: Glossary;
-  onUpdateGlossary: (glossary: Glossary) => void;
   translationHistory: TranslationHistory;
   showFilePreview?: boolean;
   analysisResult?: AIAnalysisResult | null;
@@ -175,7 +174,7 @@ const StatusBadge: React.FC<{ type: 'Good' | 'Needs Improvement' | 'Incorrect'; 
 export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (props) => {
   const { 
       files, translationKey, onUpdateValue, context: parentContext, onUpdateContext, 
-      globalContext, onUpdateGlossary, translationHistory, showFilePreview = false,
+      translationHistory, showFilePreview = false,
       analysisResult: analysisResultProp,
       isLoading: isLoadingProp,
       error: errorProp,
@@ -191,7 +190,6 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
   const [localContext, setLocalContext] = useState('');
   
   const [recentlyApplied, setRecentlyApplied] = useState<Set<string>>(new Set());
-  const [recentlyAddedToGlossary, setRecentlyAddedToGlossary] = useState<Set<string>>(new Set());
 
   // Self-managed state for when the card has its own controls
   const [selfManagedAnalysisResult, setSelfManagedAnalysisResult] = useState<AIAnalysisResult | null>(null);
@@ -227,7 +225,6 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
       setSelfManagedError(null);
       setLocalContext(parentContext || '');
       setRecentlyApplied(new Set());
-      setRecentlyAddedToGlossary(new Set());
   }, [translationKey, parentContext]);
   
   const unappliedSuggestions = useMemo(() => {
@@ -298,7 +295,7 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
         .filter(f => f.name !== polishFile.name && f.name !== englishFile?.name)
         .map(f => ({ lang: f.name, value: String(getValueByPath(f.data, translationKey) || ''), }));
     
-    const prompt = buildAnalysisPrompt(translationKey, localContext, { lang: polishFile.name, value: polishValue }, englishTranslation, otherTranslations, globalContext, translationHistory);
+    const prompt = buildAnalysisPrompt(translationKey, localContext, { lang: polishFile.name, value: polishValue }, englishTranslation, otherTranslations, translationHistory);
     setGeneratedPrompt(prompt);
     setIsPromptModalOpen(true);
   };
@@ -322,7 +319,6 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
     setSelfManagedError(null);
     setSelfManagedAnalysisResult(null);
     setRecentlyApplied(new Set());
-    setRecentlyAddedToGlossary(new Set());
 
     if (!polishFile) {
         setSelfManagedError("A Polish translation file (e.g., 'pl.json') is required as a reference for analysis.");
@@ -347,7 +343,6 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
             { lang: polishFile.name, value: polishValue }, 
             englishTranslation,
             otherTranslations, 
-            globalContext,
             translationHistory
         );
         setSelfManagedAnalysisResult(result);
@@ -422,24 +417,6 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
     }, 2000);
   };
   
-  const handleAddToGlossary = (sourceTerm: string, suggestedTranslation: string, language: string) => {
-    const newGlossary = { ...globalContext };
-    if (!newGlossary[sourceTerm]) {
-      newGlossary[sourceTerm] = {};
-    }
-    newGlossary[sourceTerm][language] = suggestedTranslation;
-    onUpdateGlossary(newGlossary);
-
-    setRecentlyAddedToGlossary(prev => new Set(prev).add(`${language}-${sourceTerm}`));
-    setTimeout(() => {
-        setRecentlyAddedToGlossary(prev => {
-            const next = new Set(prev);
-            next.delete(`${language}-${sourceTerm}`);
-            return next;
-        });
-    }, 2000);
-  };
-
   const handleApplyAllSuggestions = () => {
     const languagesApplied = new Set<string>();
     unappliedSuggestions.forEach(item => {
@@ -473,7 +450,7 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
                             {isCollapsed ? <ChevronDownIcon className="w-5 h-5" /> : <ChevronUpIcon className="w-5 h-5" />}
                            </button>
                         )}
-                        <h2 className="text-lg font-semibold text-gray-100">Translation Key</h2>
+                        <p className="text-lg text-teal-400 font-mono break-all">{translationKey}</p>
                          <button onClick={handleCopyKey} title="Copy key" className="ml-2 p-1 rounded-md hover:bg-gray-700">
                             {copiedKey ? <CheckIcon className="w-4 h-4 text-green-400" /> : <ClipboardIcon className="w-4 h-4 text-gray-400 hover:text-white" />}
                         </button>
@@ -486,7 +463,6 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
                         </div>
                     )}
                 </div>
-                <p className="text-teal-400 font-mono break-all mt-1">{translationKey}</p>
             </div>
           </div>
           {!isCollapsed && showAnalysisControls && (
@@ -637,18 +613,17 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
                                             </div>
                                         )}
                                         {analysis && (
-                                            <div className="py-3">
-                                                <div><EvaluationBadge evaluation={analysis.evaluation} /></div>
-                                                <div className="mt-2"><MarkdownRenderer content={analysis.feedback} /></div>
+                                            <div className="py-3 flex flex-col gap-2 items-start">
+                                                <EvaluationBadge evaluation={analysis.evaluation} />
+                                                <MarkdownRenderer content={analysis.feedback} />
                                                 {analysis.suggestion?.trim() && (() => {
                                                     const suggestion = analysis.suggestion.trim();
                                                     const isApplied = value === suggestion;
                                                     const wasRecentlyApplied = recentlyApplied.has(file.name);
                                                     const showAppliedState = isApplied || wasRecentlyApplied;
-                                                    const wasRecentlyAdded = recentlyAddedToGlossary.has(`${file.name}-${polishValue}`);
                                                     
                                                     return (
-                                                    <div className="mt-2 p-2 bg-gray-900/50 rounded-md border border-gray-700">
+                                                    <div className="p-2 bg-gray-900/50 rounded-md border border-gray-700 w-full">
                                                         <p className="text-xs text-gray-400 mb-1">Suggestion:</p>
                                                         <p className="font-mono text-teal-300 text-xs mb-2">"{suggestion}"</p>
                                                         <div className="flex items-center space-x-2">
@@ -670,26 +645,6 @@ export const TranslationAnalysisCard: React.FC<TranslationAnalysisCardProps> = (
                                                                 >
                                                                     Apply Suggestion
                                                                 </button>
-                                                            )}
-                                                            {polishValue && !isPolishReference && (
-                                                                wasRecentlyAdded ? (
-                                                                    <button disabled className="text-xs bg-gray-600 text-white font-semibold py-1 px-2 rounded-md flex items-center space-x-1.5 cursor-default">
-                                                                        <CheckIcon className="w-3 h-3"/>
-                                                                        <span>Added</span>
-                                                                    </button>
-                                                                ) : (
-                                                                    <button 
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            handleAddToGlossary(polishValue, suggestion, file.name);
-                                                                        }}
-                                                                        className="text-xs bg-indigo-700 hover:bg-indigo-600 text-white font-semibold py-1 px-2 rounded-md transition-colors flex items-center space-x-1.5"
-                                                                        title={`Add to Glossary: "${polishValue}" -> "${suggestion}"`}
-                                                                        >
-                                                                        <PlusCircleIcon className="w-4 h-4"/>
-                                                                        <span>Add to Glossary</span>
-                                                                    </button>
-                                                                )
                                                             )}
                                                         </div>
                                                     </div>

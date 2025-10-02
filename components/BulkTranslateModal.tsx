@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import type { BulkTranslationSuggestion, TranslationFile } from '../types';
 import { CloseIcon, LanguageIcon, CheckIcon } from './Icons';

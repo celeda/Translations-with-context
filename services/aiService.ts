@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import type { AIAnalysisResult } from '../types';
+import type { AIAnalysisResult, Glossary } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
@@ -31,7 +31,8 @@ export const analyzeTranslations = async (
   polishTranslation: { lang: string; value: string },
   englishTranslation: { lang: string; value: string } | null,
   translationsToReview: { lang: string; value: string }[],
-  model: string
+  model: string,
+  globalContext: Glossary
 ): Promise<AIAnalysisResult> => {
   
   const allTranslationsToAnalyze = [
@@ -44,11 +45,20 @@ export const analyzeTranslations = async (
     .map(t => `- Language: ${t.lang}, Translation: "${t.value}"`)
     .join('\n');
 
+  let glossaryString = "";
+  if (globalContext && Object.keys(globalContext).length > 0) {
+    glossaryString = `
+**Glosariusz Tłumaczeń (Reguły Spójności):**
+Zawsze stosuj się do poniższych reguł terminologicznych. Mają one najwyższy priorytet.
+${Object.entries(globalContext).map(([key, value]) => `- Termin "${key}" MUSI być tłumaczony jako "${value}".`).join('\n')}
+`;
+  }
+
   let prompt: string;
 
   if (englishTranslation) {
     prompt = `Jesteś ekspertem lingwistą i specjalistą od lokalizacji. Twoim zadaniem jest szczegółowa ocena tłumaczeń dla interfejsu aplikacji. Twoje odpowiedzi (w polach 'feedback' i 'suggestion') MUSZĄ być w języku polskim.
-
+${glossaryString}
 **Źródła prawdy (punkty odniesienia):**
 - **Pierwszorzędne (angielski, ${englishTranslation.lang}):** "${englishTranslation.value}"
 - **Drugorzędne (polski, ${polishTranslation.lang}):** "${polishTranslation.value}"
@@ -56,14 +66,14 @@ export const analyzeTranslations = async (
 **Kontekst:** "${context}"
 
 **Zadanie:**
-Dla każdego tłumaczenia z listy poniżej (włączając w to polski i angielski), oceń je pod kątem obu źródeł prawdy. Pamiętaj, że nawet tłumaczenia referencyjne (polski i angielski) mogą zawierać błędy, takie jak literówki czy błędy gramatyczne, które należy zidentyfikować i poprawić.
+Dla każdego tłumaczenia z listy poniżej (włączając w to polski i angielski), oceń je pod kątem obu źródeł prawdy oraz **Glosariusza**. Pamiętaj, że nawet tłumaczenia referencyjne (polski i angielski) mogą zawierać błędy, takie jak literówki czy błędy gramatyczne, które należy zidentyfikować i poprawić.
 
 **W swojej ocenie, dla każdego języka:**
 1.  **'evaluation'**: Użyj jednej z wartości: 'Good', 'Needs Improvement', lub 'Incorrect'. Te wartości muszą pozostać w języku angielskim.
 2.  **'feedback'**:
     -   Napisz szczegółową opinię w języku polskim. Użyj podstawowego markdownu, aby poprawić czytelność (np. **pogrubienie**, listy z '-').
     -   Jeśli występują różnice w stosunku do tłumaczenia angielskiego lub polskiego, podaj konkretne przykłady.
-    -   Wskaż, czy tłumaczenie jest zgodne z podanym kontekstem.
+    -   Wskaż, czy tłumaczenie jest zgodne z podanym kontekstem i **Glosariuszem**.
 3.  **'suggestion'**:
     -   Jeśli ocena to 'Needs Improvement' lub 'Incorrect', podaj **TYLKO I WYŁĄCZNIE sugerowany tekst tłumaczenia**.
     -   Pole 'suggestion' nie może zawierać żadnych dodatkowych opisów, cudzysłowów ani uzasadnień.
@@ -77,17 +87,17 @@ Zwróć odpowiedź w ustrukturyzowanym formacie JSON, zgodnie z podanym schemate
   } else {
     // Fallback to original prompt if no English file is provided
     prompt = `Jesteś ekspertem lingwistą i specjalistą od lokalizacji, oceniającym tłumaczenia dla interfejsu aplikacji. Twoje odpowiedzi (w polach 'feedback' i 'suggestion') MUSZĄ być w języku polskim.
-
+${glossaryString}
 **Kontekst:** "${context}"
 
 **Prawidłowe polskie (${polishTranslation.lang}) tłumaczenie (źródło prawdy):** "${polishTranslation.value}"
 
 **Zadanie:**
-Oceń poniższe tłumaczenia, używając polskiego tłumaczenia jako źródła prawdy. Pamiętaj, że nawet polskie tłumaczenie referencyjne może zawierać błędy (np. literówki, błędy gramatyczne), które należy zidentyfikować i poprawić.
+Oceń poniższe tłumaczenia, używając polskiego tłumaczenia jako źródła prawdy oraz **Glosariusza**. Pamiętaj, że nawet polskie tłumaczenie referencyjne może zawierać błędy (np. literówki, błędy gramatyczne), które należy zidentyfikować i poprawić.
 
 **Dla każdego tłumaczenia:**
 1.  **'evaluation'**: Użyj jednej z wartości: 'Good', 'Needs Improvement', lub 'Incorrect' (wartości muszą pozostać po angielsku).
-2.  **'feedback'**: Napisz zwięzłą opinię w języku polskim. Użyj podstawowego markdownu dla lepszej czytelności (np. **pogrubienie**).
+2.  **'feedback'**: Napisz zwięzłą opinię w języku polskim. Użyj podstawowego markdownu dla lepszej czytelności (np. **pogrubienie**). Wskaż zgodność z **Glosariuszem**.
 3.  **'suggestion'**:
     -   Jeśli ocena nie jest 'Good', podaj **TYLKO I WYŁĄCZNIE sugerowany tekst tłumaczenia**.
     -   Pole 'suggestion' nie może zawierać żadnych dodatkowych opisów, cudzysłowów ani uzasadnień.

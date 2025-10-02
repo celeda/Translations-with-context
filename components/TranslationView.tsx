@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { TranslationFile, AIAnalysisResult, AnalysisItem } from '../types';
+import type { TranslationFile, AIAnalysisResult, AnalysisItem, Glossary } from '../types';
 import { getValueByPath, getLineNumber } from '../services/translationService';
 import { analyzeTranslations } from '../services/aiService';
-import { CheckIcon, EditIcon, ClipboardIcon, SparklesIcon, PanelOpenIcon, PanelCloseIcon, BoltIcon } from './Icons';
+import { CheckIcon, EditIcon, ClipboardIcon, SparklesIcon, PanelOpenIcon, PanelCloseIcon, BoltIcon, PlusCircleIcon } from './Icons';
 import { JsonFileViewer } from './JsonFileViewer';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
@@ -12,6 +12,8 @@ interface TranslationViewProps {
   onUpdateValue: (fileName: string, key: string, newValue: any) => void;
   context: string;
   onUpdateContext: (newContext: string) => void;
+  globalContext: Glossary;
+  onUpdateGlossary: (glossary: Glossary) => void;
 }
 
 interface ValueDisplayProps {
@@ -144,7 +146,7 @@ const EvaluationBadge: React.FC<{ evaluation: 'Good' | 'Needs Improvement' | 'In
   return <span className={`${baseClasses} ${styles[evaluation]}`}>{evaluation}</span>;
 };
 
-export const TranslationView: React.FC<TranslationViewProps> = ({ files, selectedKey, onUpdateValue, context: parentContext, onUpdateContext }) => {
+export const TranslationView: React.FC<TranslationViewProps> = ({ files, selectedKey, onUpdateValue, context: parentContext, onUpdateContext, globalContext, onUpdateGlossary }) => {
   const [previewFileIndex, setPreviewFileIndex] = useState(0);
   const [isPreviewVisible, setIsPreviewVisible] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -154,6 +156,7 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
   const [localContext, setLocalContext] = useState('');
   const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
   const [recentlyApplied, setRecentlyApplied] = useState<Set<string>>(new Set());
+  const [recentlyAddedToGlossary, setRecentlyAddedToGlossary] = useState<Set<string>>(new Set());
 
   const polishFile = useMemo(() => files.find(f => f.name.toLowerCase().includes('pl') || f.name.toLowerCase().includes('polish')), [files]);
   const englishFile = useMemo(() => files.find(f => f.name.toLowerCase().includes('en') || f.name.toLowerCase().includes('english')), [files]);
@@ -169,6 +172,7 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
       setError(null);
       setLocalContext(parentContext || '');
       setRecentlyApplied(new Set());
+      setRecentlyAddedToGlossary(new Set());
   }, [selectedKey, parentContext]);
 
   const analysisMap = useMemo(() => {
@@ -204,6 +208,7 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
     setError(null);
     setAnalysisResult(null);
     setRecentlyApplied(new Set());
+    setRecentlyAddedToGlossary(new Set());
 
     if (!polishFile) {
         setError("A Polish translation file (e.g., 'pl.json') is required as a reference for analysis.");
@@ -233,7 +238,8 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
             { lang: polishFile.name, value: polishValue }, 
             englishTranslation,
             otherTranslations, 
-            selectedModel
+            selectedModel,
+            globalContext
         );
         setAnalysisResult(result);
     } catch (e: any) {
@@ -274,6 +280,18 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
         setRecentlyApplied(prev => {
             const next = new Set(prev);
             next.delete(fileName);
+            return next;
+        });
+    }, 2000);
+  };
+  
+  const handleAddToGlossary = (sourceTerm: string, suggestedTranslation: string, language: string) => {
+    onUpdateGlossary({ ...globalContext, [sourceTerm]: suggestedTranslation });
+    setRecentlyAddedToGlossary(prev => new Set(prev).add(language));
+    setTimeout(() => {
+        setRecentlyAddedToGlossary(prev => {
+            const next = new Set(prev);
+            next.delete(language);
             return next;
         });
     }, 2000);
@@ -392,6 +410,7 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
                   <tbody>
                   {files.map((file, index) => {
                       const value = getValueByPath(file.data, selectedKey);
+                      const polishValue = polishFile ? String(getValueByPath(polishFile.data, selectedKey) || '') : '';
                       const lineNumber = getLineNumber(file.data, selectedKey);
                       const handleSave = (newValue: any) => onUpdateValue(file.name, selectedKey, newValue);
                       const isActive = index === previewFileIndex;
@@ -409,6 +428,8 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
                       const isApplied = suggestion ? value === suggestion : false;
                       const wasRecentlyApplied = recentlyApplied.has(file.name);
                       const showAppliedState = isApplied || wasRecentlyApplied;
+
+                      const wasRecentlyAdded = recentlyAddedToGlossary.has(file.name);
 
                       return (
                           <tr 
@@ -452,25 +473,47 @@ export const TranslationView: React.FC<TranslationViewProps> = ({ files, selecte
                                             <div className="mt-2 p-2 bg-gray-900/50 rounded-md border border-gray-700">
                                                 <p className="text-xs text-gray-400 mb-1">Suggestion:</p>
                                                 <p className="font-mono text-teal-300 text-xs mb-2">"{analysis.suggestion}"</p>
-                                                {showAppliedState ? (
-                                                  <button 
-                                                      disabled
-                                                      className="text-xs bg-green-700 text-white font-semibold py-1 px-2 rounded-md flex items-center space-x-1 cursor-default"
-                                                  >
-                                                      <CheckIcon className="w-3 h-3" />
-                                                      <span>Applied</span>
-                                                  </button>
-                                                ) : (
-                                                  <button 
-                                                      onClick={(e) => {
-                                                          e.stopPropagation();
-                                                          handleApplySuggestion(file.name, suggestion);
-                                                      }}
-                                                      className="text-xs bg-teal-700 hover:bg-teal-600 text-white font-semibold py-1 px-2 rounded-md transition-colors"
-                                                  >
-                                                      Apply Suggestion
-                                                  </button>
-                                                )}
+                                                <div className="flex items-center space-x-2">
+                                                    {showAppliedState ? (
+                                                      <button 
+                                                          disabled
+                                                          className="text-xs bg-green-700 text-white font-semibold py-1 px-2 rounded-md flex items-center space-x-1 cursor-default"
+                                                      >
+                                                          <CheckIcon className="w-3 h-3" />
+                                                          <span>Applied</span>
+                                                      </button>
+                                                    ) : (
+                                                      <button 
+                                                          onClick={(e) => {
+                                                              e.stopPropagation();
+                                                              handleApplySuggestion(file.name, suggestion);
+                                                          }}
+                                                          className="text-xs bg-teal-700 hover:bg-teal-600 text-white font-semibold py-1 px-2 rounded-md transition-colors"
+                                                      >
+                                                          Apply Suggestion
+                                                      </button>
+                                                    )}
+                                                    {polishValue && !isPolishReference && (
+                                                        wasRecentlyAdded ? (
+                                                            <button disabled className="text-xs bg-gray-600 text-white font-semibold py-1 px-2 rounded-md flex items-center space-x-1.5 cursor-default">
+                                                                <CheckIcon className="w-3 h-3"/>
+                                                                <span>Added</span>
+                                                            </button>
+                                                        ) : (
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleAddToGlossary(polishValue, suggestion, file.name);
+                                                                }}
+                                                                className="text-xs bg-indigo-700 hover:bg-indigo-600 text-white font-semibold py-1 px-2 rounded-md transition-colors flex items-center space-x-1.5"
+                                                                title={`Add to Glossary: "${polishValue}" -> "${suggestion}"`}
+                                                                >
+                                                                <PlusCircleIcon className="w-4 h-4"/>
+                                                                <span>Add to Glossary</span>
+                                                            </button>
+                                                        )
+                                                    )}
+                                                </div>
                                             </div>
                                         )}
                                     </div>

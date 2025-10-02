@@ -1,9 +1,9 @@
 import React, { useState, useCallback } from 'react';
-import type { TranslationFile } from '../types';
+import type { TranslationFile, Glossary } from '../types';
 import { UploadIcon } from './Icons';
 
 interface FileUploaderProps {
-  onFilesUploaded: (result: { translationFiles: TranslationFile[], contexts: Record<string, string> }) => void;
+  onFilesUploaded: (result: { translationFiles: TranslationFile[], contexts: Record<string, string>, glossary: Glossary }) => void;
   compact?: boolean;
 }
 
@@ -16,7 +16,8 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFilesUploaded, com
     const filesArray = Array.from(fileList);
     const translationFiles: TranslationFile[] = [];
     let contexts: Record<string, string> = {};
-    const defaultResult = { translationFiles: [], contexts: {} };
+    let glossary: Glossary = {};
+    const defaultResult = { translationFiles: [], contexts: {}, glossary: {} };
 
     const hasContextJson = filesArray.some(file => file.name === 'context.json');
     if (!hasContextJson) {
@@ -50,6 +51,14 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFilesUploaded, com
             onFilesUploaded(defaultResult);
             return;
           }
+        } else if (file.name === 'glossary.json') {
+          if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+            glossary = data;
+          } else {
+            setError(`File "glossary.json" has an invalid format. It must be a JSON object.`);
+            onFilesUploaded(defaultResult);
+            return;
+          }
         } else {
           const fileName = file.name.replace('.json', '');
           translationFiles.push({ name: fileName, data });
@@ -60,7 +69,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFilesUploaded, com
         return;
       }
     }
-    onFilesUploaded({ translationFiles, contexts });
+    onFilesUploaded({ translationFiles, contexts, glossary });
   }, [onFilesUploaded]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -129,7 +138,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFilesUploaded, com
           <p className="mb-2 text-sm text-gray-400">
             <span className="font-semibold text-teal-400">Click to upload</span> or drag and drop
           </p>
-          <p className="text-xs text-gray-500">A `context.json` file is required</p>
+          <p className="text-xs text-gray-500">`context.json` is required. Optional: `glossary.json`</p>
         </div>
         <input 
           id="file-upload" 

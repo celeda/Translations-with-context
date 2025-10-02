@@ -13,3 +13,5 @@ export interface AnalysisItem {
 export interface AIAnalysisResult {
   analysis: AnalysisItem[];
 }
+
+export type Glossary = Record<string, string>;

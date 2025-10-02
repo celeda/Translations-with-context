@@ -5,11 +5,15 @@ import { FileUploader } from './components/FileUploader';
 import { TranslationKeyList } from './components/TranslationKeyList';
 import { TranslationView } from './components/TranslationView';
 import { GlossaryModal } from './components/GlossaryModal';
-import { LogoIcon, DownloadIcon, BookOpenIcon } from './components/Icons';
+import { ValueSearchPanel } from './components/ValueSearchPanel';
+import { ValueSearchResultsView } from './components/ValueSearchResultsView';
+import { LogoIcon, DownloadIcon, BookOpenIcon, ListBulletIcon, SearchIcon } from './components/Icons';
 
 // Declare JSZip and saveAs for TypeScript since they are loaded from script tags
 declare var JSZip: any;
 declare var saveAs: any;
+
+type ActiveView = 'keys' | 'search';
 
 const App: React.FC = () => {
   const [translationFiles, setTranslationFiles] = useState<TranslationFile[]>([]);
@@ -19,6 +23,10 @@ const App: React.FC = () => {
   const [allKeys, setAllKeys] = useState<string[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [isGlossaryOpen, setIsGlossaryOpen] = useState(false);
+  
+  const [activeView, setActiveView] = useState<ActiveView>('keys');
+  const [searchQuery, setSearchQuery] = useState<{ term: string; lang: string } | null>(null);
+  const [searchResults, setSearchResults] = useState<string[]>([]);
 
   const handleFilesUpload = (uploadResult: { translationFiles: TranslationFile[], contexts: Record<string, string>, glossary: Glossary, history: TranslationHistory }) => {
     setTranslationFiles(uploadResult.translationFiles);
@@ -35,6 +43,10 @@ const App: React.FC = () => {
       const sortedKeys = Array.from(allKeysSet).sort();
       setAllKeys(sortedKeys);
       setSelectedKey(sortedKeys[0] || null);
+      // Reset search state on new upload
+      setActiveView('keys');
+      setSearchResults([]);
+      setSearchQuery(null);
     } else {
       setAllKeys([]);
       setSelectedKey(null);
@@ -70,6 +82,26 @@ const App: React.FC = () => {
       const newContexts = setValueByPath(prevContexts, key, newContext);
       return newContexts;
     });
+  };
+
+  const handleValueSearch = (term: string, lang: string) => {
+    if (!term || !lang) {
+      setSearchResults([]);
+      setSearchQuery(null);
+      return;
+    }
+
+    const sourceFile = translationFiles.find(f => f.name === lang);
+    if (!sourceFile) return;
+
+    const results = allKeys.filter(key => {
+      const value = getValueByPath(sourceFile.data, key);
+      return value && typeof value === 'string' && value.toLowerCase().includes(term.toLowerCase());
+    });
+
+    setSearchQuery({ term, lang });
+    setSearchResults(results);
+    setActiveView('search'); // Switch view to show results
   };
 
   const handleDownloadFiles = async () => {
@@ -158,14 +190,38 @@ const App: React.FC = () => {
                       </button>
                     </div>
                 </div>
-                <TranslationKeyList 
-                  keys={allKeys} 
-                  onSelectKey={setSelectedKey}
-                  selectedKey={selectedKey}
-                />
+                <div className="flex border-b border-gray-700 flex-shrink-0">
+                    <button
+                        onClick={() => setActiveView('keys')}
+                        className={`flex-1 flex items-center justify-center space-x-2 p-3 text-sm font-medium transition-colors ${activeView === 'keys' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:bg-gray-700/50'}`}
+                    >
+                        <ListBulletIcon className="w-5 h-5" />
+                        <span>Keys</span>
+                    </button>
+                    <button
+                        onClick={() => setActiveView('search')}
+                        className={`flex-1 flex items-center justify-center space-x-2 p-3 text-sm font-medium transition-colors ${activeView === 'search' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:bg-gray-700/50'}`}
+                    >
+                        <SearchIcon className="w-5 h-5" />
+                        <span>Search by Value</span>
+                    </button>
+                </div>
+
+                {activeView === 'keys' ? (
+                  <TranslationKeyList 
+                    keys={allKeys} 
+                    onSelectKey={setSelectedKey}
+                    selectedKey={selectedKey}
+                  />
+                ) : (
+                  <ValueSearchPanel 
+                    onSearch={handleValueSearch}
+                    languages={translationFiles.map(f => f.name)}
+                  />
+                )}
               </aside>
-              <main className="flex-1 overflow-hidden p-4 md:p-6 lg:p-8">
-                {selectedKey ? (
+              <main className="flex-1 overflow-hidden">
+                {activeView === 'keys' && selectedKey ? (
                     <TranslationView 
                         files={translationFiles}
                         selectedKey={selectedKey}
@@ -176,9 +232,21 @@ const App: React.FC = () => {
                         onUpdateGlossary={setGlobalContext}
                         translationHistory={translationHistory}
                     />
+                ) : activeView === 'search' ? (
+                   <ValueSearchResultsView
+                        keys={searchResults}
+                        searchQuery={searchQuery}
+                        files={translationFiles}
+                        contexts={contexts}
+                        globalContext={globalContext}
+                        translationHistory={translationHistory}
+                        onUpdateValue={handleUpdateValueAndHistory}
+                        onUpdateContext={handleUpdateContext}
+                        onUpdateGlossary={setGlobalContext}
+                    />
                 ) : (
-                    <div className="flex items-center justify-center h-full bg-gray-800/30 rounded-lg">
-                        <p className="text-gray-500">Select a key from the left to see translations.</p>
+                    <div className="flex items-center justify-center h-full bg-gray-800/30 rounded-lg m-8">
+                        <p className="text-gray-500">{activeView === 'keys' ? 'Select a key from the left to see translations.' : 'Perform a search to see results.'}</p>
                     </div>
                 )}
               </main>

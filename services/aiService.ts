@@ -125,6 +125,7 @@ ${translationsString}
 Zwróć odpowiedź w ustrukturyzowanym formacie JSON, zgodnie z podanym schematem.`;
 
   try {
+    const ai = getAIClient();
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,
@@ -174,6 +175,7 @@ ${translationsString}
 Sugerowany Kontekst (odpowiedz TYLKO I WYŁĄCZNIE sugerowanym tekstem opisu, bez żadnych dodatkowych wstępów, formatowania markdown, cudzysłowów czy nagłówków typu "Sugerowany Kontekst:"):`;
 
   try {
+    const ai = getAIClient();
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,

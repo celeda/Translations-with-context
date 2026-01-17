@@ -2,7 +2,13 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { AIAnalysisResult, TranslationHistory, TranslationFile } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+if (!apiKey) {
+  throw new Error('VITE_GEMINI_API_KEY is not set. Please add it to your .env file.');
+}
+
+const ai = new GoogleGenAI({ apiKey });
 
 const analysisSchema = {
   type: Type.OBJECT,
